@@ -1,0 +1,31 @@
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Node modules are ignored in the frontend directory already, but good to have here just in case
+node_modules/
+
+# Target output
+/backend/target/
+/frontend/dist/
+/recruitshield-frontend/dist/
