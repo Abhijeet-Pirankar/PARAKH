@@ -1,95 +1,100 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
+import { analyzeOffer } from '../services/api';
 
 function CheckOffer() {
   const location = useLocation();
   const [offerText, setOfferText] = useState(location.state?.initialOfferText || '');
-  const [offerUrl, setOfferUrl] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [companyWebsite, setCompanyWebsite] = useState('');
+  const [recruiterEmail, setRecruiterEmail] = useState('');
+  const [receivedVia, setReceivedVia] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
 
   // Automatically analyze if text was passed from homepage
   useEffect(() => {
     if (location.state?.initialOfferText && location.state.initialOfferText.trim()) {
-      runAnalysis(location.state.initialOfferText, '');
+      runAnalysis({ offerText: location.state.initialOfferText });
     }
   }, [location.state]);
 
-  const runAnalysis = (text, url) => {
-    setError('');
+  const runAnalysis = async (customPayload = null) => {
+    const payload = customPayload || {
+      offerText,
+      companyName,
+      companyWebsite,
+      recruiterEmail,
+      receivedVia
+    };
+
+    // Client-side validation
+    if (!payload.offerText || !payload.offerText.trim()) {
+      setError({
+        type: 'VALIDATION',
+        message: 'Please provide the offer message or text to analyze.'
+      });
+      return;
+    }
+
+    if (payload.recruiterEmail && payload.recruiterEmail.trim()) {
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(payload.recruiterEmail.trim())) {
+        setError({
+          type: 'VALIDATION',
+          message: 'Please enter a valid recruiter email address (e.g. recruiter@company.com).'
+        });
+        return;
+      }
+    }
+
+    setError(null);
     setIsLoading(true);
     setResult(null);
 
-    // Realistic signal heuristic evaluation
-    setTimeout(() => {
+    try {
+      const data = await analyzeOffer(payload);
+      setResult(data);
+    } catch (err) {
+      if (err.code === 'BACKEND_UNAVAILABLE') {
+        setError({
+          type: 'UNAVAILABLE',
+          message: 'Unable to connect to PARAKH backend service. Please ensure the Spring Boot server is running on http://localhost:8080.'
+        });
+      } else if (err.status === 400) {
+        setError({
+          type: 'VALIDATION',
+          message: err.message || 'Validation error: please check your offer inputs.'
+        });
+      } else {
+        setError({
+          type: 'SERVER',
+          message: err.message || 'An error occurred while communicating with the analysis service.'
+        });
+      }
+    } finally {
       setIsLoading(false);
-
-      const hasFee = /fee|pay|deposit|purchase|money|advance check|stipend.*before|kit/i.test(text);
-      const hasPersonalEmail = /@(gmail|yahoo|hotmail|outlook)\.com/i.test(text);
-      const hasShortUrl = /bit\.ly|tinyurl|forms\.gle|t\.me/i.test(text) || /bit\.ly|tinyurl|forms\.gle|t\.me/i.test(url);
-
-      let calculatedScore = 82;
-      let calculatedStatus = 'HIGHLY SUSPICIOUS';
-      const redFlags = [];
-      const positiveSignals = [];
-      const recommendations = [];
-
-      if (hasPersonalEmail) {
-        redFlags.push('Recruiter uses public webmail (Gmail/Yahoo) rather than verified corporate domain');
-      } else {
-        redFlags.push('Personal email or unverified contact route instead of company domain');
-      }
-
-      if (hasFee) {
-        redFlags.push('Advance payment or equipment purchase required prior to employment');
-      } else {
-        redFlags.push('Registration fee or onboarding financial transaction requested');
-      }
-
-      if (hasShortUrl || url) {
-        redFlags.push('Suspicious shortened recruitment or application redirection URL detected');
-      } else {
-        redFlags.push('Urgent phrasing requesting immediate acceptance without formal interview');
-      }
-
-      redFlags.push('High salary promised with minimal skill prerequisites or interview gates');
-
-      positiveSignals.push('Company entity name referenced in recruitment narrative');
-      positiveSignals.push('Job description structure outlines standard role deliverables');
-
-      recommendations.push('Do not transfer funds, share bank credentials, or purchase equipment through third-party links.');
-      recommendations.push('Cross-reference this recruiter persona on LinkedIn and the company’s official careers page.');
-      recommendations.push('Request formal email communication originating exclusively from the employer’s verified web domain.');
-
-      setResult({
-        score: calculatedScore,
-        status: calculatedStatus,
-        redFlags,
-        positiveSignals,
-        recommendations
-      });
-    }, 1200);
+    }
   };
 
   const handleAnalyze = (e) => {
     e.preventDefault();
-    if (!offerText.trim() && !offerUrl.trim()) {
-      setError('Please paste an offer message or enter an application URL to analyze.');
-      return;
-    }
-    runAnalysis(offerText, offerUrl);
+    runAnalysis();
   };
 
   const handleClear = () => {
     setOfferText('');
-    setOfferUrl('');
+    setCompanyName('');
+    setCompanyWebsite('');
+    setRecruiterEmail('');
+    setReceivedVia('');
     setResult(null);
-    setError('');
+    setError(null);
   };
 
-  const getStatusMeta = (score) => {
-    if (score < 40) {
+  const getStatusMeta = (score, status, riskLevel) => {
+    if (status === 'LIKELY_GENUINE' || riskLevel === 'LOW' || score < 30) {
       return { 
         color: 'var(--safe-green)', 
         bg: 'var(--safe-bg)', 
@@ -98,7 +103,7 @@ function CheckOffer() {
         label: 'LIKELY GENUINE' 
       };
     }
-    if (score < 70) {
+    if (status === 'NEEDS_VERIFICATION' || riskLevel === 'MEDIUM' || score < 60) {
       return { 
         color: 'var(--warn-amber)', 
         bg: 'var(--warn-bg)', 
@@ -116,7 +121,8 @@ function CheckOffer() {
     };
   };
 
-  const statusMeta = result ? getStatusMeta(result.score) : null;
+  const currentScore = result ? (result.riskScore !== undefined ? result.riskScore : result.score) : 0;
+  const statusMeta = result ? getStatusMeta(currentScore, result.status, result.riskLevel) : null;
 
   return (
     <div className="animate-fade-in container" style={{ paddingTop: '2.5rem', paddingBottom: '5rem' }}>
@@ -169,25 +175,98 @@ Link: http://bit.ly/apex-onboarding-kit`}
               maxLength={5000}
               onChange={(e) => setOfferText(e.target.value)}
               style={{ minHeight: '170px', fontSize: '0.9rem' }}
+              disabled={isLoading}
             />
             <div style={{ marginTop: '0.45rem', fontSize: '0.785rem', color: 'var(--text-muted)' }}>
               Supports emails, WhatsApp messages, LinkedIn DMs, Telegram outreach, or job descriptions.
             </div>
           </div>
 
-          <div className="input-group" style={{ marginBottom: '1.75rem' }}>
-            <label htmlFor="offerUrl" className="input-label">
-              Application or Recruiter URL <span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: '0.8rem' }}>(Optional)</span>
-            </label>
-            <input
-              type="url"
-              id="offerUrl"
-              className="input-field mono"
-              placeholder="e.g. https://forms.gle/... or link provided in outreach"
-              value={offerUrl}
-              onChange={(e) => setOfferUrl(e.target.value)}
-              style={{ fontSize: '0.9rem' }}
-            />
+          {/* Additional Context Fields */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: '1rem',
+            marginBottom: '1rem'
+          }}>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label htmlFor="companyName" className="input-label">
+                Company Name <span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: '0.8rem' }}>(Optional)</span>
+              </label>
+              <input
+                type="text"
+                id="companyName"
+                className="input-field"
+                placeholder="e.g. Example Company, Infosys"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                style={{ fontSize: '0.9rem' }}
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="input-group" style={{ margin: 0 }}>
+              <label htmlFor="companyWebsite" className="input-label">
+                Company Website or URL <span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: '0.8rem' }}>(Optional)</span>
+              </label>
+              <input
+                type="url"
+                id="companyWebsite"
+                className="input-field mono"
+                placeholder="e.g. https://example.com"
+                value={companyWebsite}
+                onChange={(e) => setCompanyWebsite(e.target.value)}
+                style={{ fontSize: '0.9rem' }}
+                disabled={isLoading}
+              />
+            </div>
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: '1rem',
+            marginBottom: '1.75rem'
+          }}>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label htmlFor="recruiterEmail" className="input-label">
+                Recruiter Email <span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: '0.8rem' }}>(Optional)</span>
+              </label>
+              <input
+                type="email"
+                id="recruiterEmail"
+                className="input-field mono"
+                placeholder="e.g. recruiter@gmail.com"
+                value={recruiterEmail}
+                onChange={(e) => setRecruiterEmail(e.target.value)}
+                style={{ fontSize: '0.9rem' }}
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="input-group" style={{ margin: 0 }}>
+              <label htmlFor="receivedVia" className="input-label">
+                Received Via <span style={{ color: 'var(--text-muted)', fontWeight: 'normal', fontSize: '0.8rem' }}>(Optional)</span>
+              </label>
+              <select
+                id="receivedVia"
+                className="input-field"
+                value={receivedVia}
+                onChange={(e) => setReceivedVia(e.target.value)}
+                style={{ fontSize: '0.9rem' }}
+                disabled={isLoading}
+              >
+                <option value="">Select communication medium...</option>
+                <option value="WhatsApp">WhatsApp</option>
+                <option value="Telegram">Telegram</option>
+                <option value="Email">Email</option>
+                <option value="LinkedIn">LinkedIn</option>
+                <option value="SMS">SMS / Text Message</option>
+                <option value="Company Portal">Company Portal / Careers Page</option>
+                <option value="Job Board">Job Board (Indeed, Naukri, etc.)</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
           </div>
 
           {/* Action Row */}
@@ -219,7 +298,7 @@ Link: http://bit.ly/apex-onboarding-kit`}
               className="btn btn-secondary" 
               onClick={handleClear}
               style={{ padding: '0.85rem 1.6rem', fontSize: '0.9rem' }}
-              disabled={isLoading || (!offerText && !offerUrl && !result && !error)}
+              disabled={isLoading || (!offerText && !companyName && !companyWebsite && !recruiterEmail && !receivedVia && !result && !error)}
             >
               Clear
             </button>
@@ -243,11 +322,11 @@ Link: http://bit.ly/apex-onboarding-kit`}
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
               </svg>
-              <span>Zero data retention. Offer content is analyzed strictly in memory.</span>
+              <span>Automated forensic analysis powered by PARAKH Risk Engine</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--brand-blue)' }}></span>
-              <span>256-bit TLS Signal Analysis</span>
+              <span>Spring Boot REST Verification</span>
             </div>
           </div>
         </form>
@@ -260,28 +339,35 @@ Link: http://bit.ly/apex-onboarding-kit`}
           style={{ 
             maxWidth: '820px', 
             margin: '1.25rem auto 0', 
-            padding: '0.85rem 1.25rem', 
-            backgroundColor: 'var(--danger-bg)', 
-            color: '#fca5a5', 
+            padding: '1rem 1.25rem', 
+            backgroundColor: error.type === 'UNAVAILABLE' ? 'var(--warn-bg)' : 'var(--danger-bg)', 
+            color: error.type === 'UNAVAILABLE' ? '#fde68a' : '#fca5a5', 
             borderRadius: 'var(--radius-md)', 
-            border: '1px solid var(--danger-border)', 
+            border: `1px solid ${error.type === 'UNAVAILABLE' ? 'var(--warn-border)' : 'var(--danger-border)'}`, 
             display: 'flex', 
-            alignItems: 'center', 
+            alignItems: 'flex-start', 
             gap: '0.75rem', 
             fontSize: '0.9rem',
             fontWeight: '500'
           }}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg style={{ flexShrink: 0, marginTop: '2px' }} xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="12" y1="8" x2="12" y2="12"></line>
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
-          <span>{error}</span>
+          <div>
+            <div style={{ fontWeight: '600', marginBottom: '0.2rem' }}>
+              {error.type === 'UNAVAILABLE' ? 'Backend Service Unavailable' : error.type === 'VALIDATION' ? 'Validation Notice' : 'Analysis Request Failed'}
+            </div>
+            <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>
+              {error.message}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Verification Result Card */}
+      {/* Verification Result Card / Risk Report */}
       {result && statusMeta && (
         <div 
           className="glass-panel animate-fade-in" 
@@ -297,7 +383,7 @@ Link: http://bit.ly/apex-onboarding-kit`}
             display: 'flex', 
             justifyContent: 'space-between', 
             alignItems: 'center', 
-            marginBottom: '2.25rem', 
+            marginBottom: '1.75rem', 
             flexWrap: 'wrap', 
             gap: '1.5rem',
             paddingBottom: '1.5rem',
@@ -310,12 +396,19 @@ Link: http://bit.ly/apex-onboarding-kit`}
               <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.45rem' }}>
                 Verification Results
               </h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
                 <span className={`status-badge ${statusMeta.badgeClass}`} style={{ fontSize: '0.8rem', padding: '0.35rem 0.85rem' }}>
                   <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: statusMeta.color }}></span>
-                  {result.status}
+                  {result.status ? result.status.replace(/_/g, ' ') : statusMeta.label}
                 </span>
-                <span style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>Multi-vector risk confidence calculated</span>
+                {result.riskLevel && (
+                  <span style={{ fontSize: '0.825rem', color: statusMeta.color, fontWeight: '600' }}>
+                    {result.riskLevel} RISK
+                  </span>
+                )}
+                <span style={{ fontSize: '0.825rem', color: 'var(--text-muted)' }}>
+                  Multi-vector risk confidence calculated
+                </span>
               </div>
             </div>
 
@@ -334,7 +427,7 @@ Link: http://bit.ly/apex-onboarding-kit`}
                   Threat Index
                 </div>
                 <div style={{ fontSize: '2.2rem', fontWeight: '800', color: statusMeta.color, lineHeight: '1' }}>
-                  {result.score} <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)', fontWeight: '500' }}>/ 100</span>
+                  {currentScore} <span style={{ fontSize: '0.95rem', color: 'var(--text-muted)', fontWeight: '500' }}>/ 100</span>
                 </div>
               </div>
 
@@ -349,7 +442,7 @@ Link: http://bit.ly/apex-onboarding-kit`}
                     stroke={statusMeta.color} 
                     strokeWidth="9" 
                     strokeDasharray="251.2" 
-                    strokeDashoffset={251.2 - (251.2 * result.score) / 100}
+                    strokeDashoffset={251.2 - (251.2 * currentScore) / 100}
                     strokeLinecap="round"
                     style={{ transition: 'stroke-dashoffset 0.8s var(--ease-out)' }}
                   />
@@ -357,6 +450,23 @@ Link: http://bit.ly/apex-onboarding-kit`}
               </div>
             </div>
           </div>
+
+          {/* Executive Summary */}
+          {result.analysisSummary && (
+            <div style={{
+              marginBottom: '2rem',
+              padding: '1rem 1.25rem',
+              backgroundColor: 'var(--bg-secondary)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-subtle)',
+              fontSize: '0.9rem',
+              color: 'var(--text-secondary)',
+              lineHeight: '1.6'
+            }}>
+              <strong style={{ color: 'var(--text-primary)' }}>Analysis Summary: </strong>
+              {result.analysisSummary}
+            </div>
+          )}
 
           {/* Red Flags & Positive Signals */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.75rem', marginBottom: '2.25rem' }}>
@@ -366,32 +476,38 @@ Link: http://bit.ly/apex-onboarding-kit`}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
                 <span style={{ color: 'var(--danger-red)', fontSize: '1.1rem' }}>⚠</span>
                 <h3 style={{ fontSize: '1rem', color: '#fca5a5', margin: 0 }}>
-                  Detected Red Flags
+                  Detected Red Flags ({result.redFlags ? result.redFlags.length : 0})
                 </h3>
               </div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                {result.redFlags.map((flag, idx) => (
-                  <li 
-                    key={idx} 
-                    style={{ 
-                      padding: '0.75rem 0.95rem', 
-                      backgroundColor: 'var(--danger-bg)', 
-                      border: '1px solid var(--danger-border)', 
-                      borderLeft: '3px solid var(--danger-red)', 
-                      borderRadius: '0 var(--radius-sm) var(--radius-sm) 0', 
-                      display: 'flex', 
-                      alignItems: 'flex-start', 
-                      gap: '0.65rem', 
-                      fontSize: '0.875rem', 
-                      color: '#fecaca', 
-                      lineHeight: '1.5'
-                    }}
-                  >
-                    <span style={{ fontWeight: 'bold', color: 'var(--danger-red)' }}>⚠</span>
-                    <span>{flag}</span>
-                  </li>
-                ))}
-              </ul>
+              {result.redFlags && result.redFlags.length > 0 ? (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {result.redFlags.map((flag, idx) => (
+                    <li 
+                      key={idx} 
+                      style={{ 
+                        padding: '0.75rem 0.95rem', 
+                        backgroundColor: 'var(--danger-bg)', 
+                        border: '1px solid var(--danger-border)', 
+                        borderLeft: '3px solid var(--danger-red)', 
+                        borderRadius: '0 var(--radius-sm) var(--radius-sm) 0', 
+                        display: 'flex', 
+                        alignItems: 'flex-start', 
+                        gap: '0.65rem', 
+                        fontSize: '0.875rem', 
+                        color: '#fecaca', 
+                        lineHeight: '1.5'
+                      }}
+                    >
+                      <span style={{ fontWeight: 'bold', color: 'var(--danger-red)' }}>⚠</span>
+                      <span>{flag}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
+                  No red flags identified.
+                </p>
+              )}
             </div>
 
             {/* Positive Signals */}
@@ -399,32 +515,38 @@ Link: http://bit.ly/apex-onboarding-kit`}
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
                 <span style={{ color: 'var(--safe-green)', fontSize: '1.1rem' }}>✓</span>
                 <h3 style={{ fontSize: '1rem', color: '#86efac', margin: 0 }}>
-                  Positive Signals
+                  Positive Signals ({result.positiveSignals ? result.positiveSignals.length : 0})
                 </h3>
               </div>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                {result.positiveSignals.map((signal, idx) => (
-                  <li 
-                    key={idx} 
-                    style={{ 
-                      padding: '0.75rem 0.95rem', 
-                      backgroundColor: 'var(--safe-bg)', 
-                      border: '1px solid var(--safe-border)', 
-                      borderLeft: '3px solid var(--safe-green)', 
-                      borderRadius: '0 var(--radius-sm) var(--radius-sm) 0', 
-                      display: 'flex', 
-                      alignItems: 'flex-start', 
-                      gap: '0.65rem', 
-                      fontSize: '0.875rem', 
-                      color: '#bbf7d0', 
-                      lineHeight: '1.5'
-                    }}
-                  >
-                    <span style={{ fontWeight: 'bold', color: 'var(--safe-green)' }}>✓</span>
-                    <span>{signal}</span>
-                  </li>
-                ))}
-              </ul>
+              {result.positiveSignals && result.positiveSignals.length > 0 ? (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {result.positiveSignals.map((signal, idx) => (
+                    <li 
+                      key={idx} 
+                      style={{ 
+                        padding: '0.75rem 0.95rem', 
+                        backgroundColor: 'var(--safe-bg)', 
+                        border: '1px solid var(--safe-border)', 
+                        borderLeft: '3px solid var(--safe-green)', 
+                        borderRadius: '0 var(--radius-sm) var(--radius-sm) 0', 
+                        display: 'flex', 
+                        alignItems: 'flex-start', 
+                        gap: '0.65rem', 
+                        fontSize: '0.875rem', 
+                        color: '#bbf7d0', 
+                        lineHeight: '1.5'
+                      }}
+                    >
+                      <span style={{ fontWeight: 'bold', color: 'var(--safe-green)' }}>✓</span>
+                      <span>{signal}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
+                  No standard positive indicators found.
+                </p>
+              )}
             </div>
 
           </div>
@@ -440,16 +562,22 @@ Link: http://bit.ly/apex-onboarding-kit`}
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
               </svg>
-              <span>Advisory Recommendations</span>
+              <span>Advisory Recommendations ({result.recommendations ? result.recommendations.length : 0})</span>
             </h3>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-              {result.recommendations.map((rec, idx) => (
-                <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem', color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: '1.5' }}>
-                  <span style={{ color: 'var(--brand-blue-secondary)', fontWeight: 'bold' }}>•</span>
-                  <span>{rec}</span>
-                </li>
-              ))}
-            </ul>
+            {result.recommendations && result.recommendations.length > 0 ? (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                {result.recommendations.map((rec, idx) => (
+                  <li key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.65rem', color: 'var(--text-secondary)', fontSize: '0.875rem', lineHeight: '1.5' }}>
+                    <span style={{ color: 'var(--brand-blue-secondary)', fontWeight: 'bold' }}>•</span>
+                    <span>{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
+                Standard verification on corporate career portal recommended.
+              </p>
+            )}
           </div>
 
         </div>
