@@ -1,188 +1,164 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import Logo from './Logo';
 
-function Navbar() {
+export default function Navbar() {
   const location = useLocation();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isThemeDark, setIsThemeDark] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const toggleMobileMenu = () => {
-    setIsMobileMenuOpen(!isMobileMenuOpen);
+  const isActive = (path) => {
+    if (path === '/') return location.pathname === '/' && !location.hash;
+    return location.pathname === path;
   };
 
-  const closeMobileMenu = () => {
-    setIsMobileMenuOpen(false);
-  };
-
-  const toggleTheme = () => {
-    setIsThemeDark(!isThemeDark);
-  };
+  const closeMenu = () => setMobileMenuOpen(false);
 
   return (
-    <header className="navbar-wrapper">
-      <nav className="navbar" aria-label="Main Navigation">
+    <header className="fixed top-0 inset-x-0 z-50 bg-surface-container-lowest/85 backdrop-blur-xl border-b border-surface-variant/40">
+      <div className="h-16 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
         {/* Brand Left */}
-        <Link to="/" className="nav-brand" onClick={closeMobileMenu} aria-label="PARAKH Home">
-          <svg 
-            xmlns="http://www.w3.org/2000/svg" 
-            width="24" 
-            height="24" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="var(--brand-blue)" 
-            strokeWidth="2.2" 
-            strokeLinecap="round" 
-            strokeLinejoin="round"
-          >
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-            <path d="m9 12 2 2 4-4" stroke="var(--brand-blue-secondary)" strokeWidth="2"></path>
-          </svg>
-          <span className="nav-brand-title">PARAKH</span>
+        <Link to="/" onClick={closeMenu} className="flex items-center gap-3 shrink-0 focus:outline-none">
+          <Logo className="h-8 w-auto object-contain" />
         </Link>
 
-        {/* Center Desktop Links */}
-        <div className="nav-links desktop-nav">
-          <Link 
-            to="/" 
-            className={`nav-link ${location.pathname === '/' && !location.hash ? 'active' : ''}`}
+        {/* Desktop Navigation */}
+        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium">
+          <Link
+            to="/"
+            className={`transition-colors py-1 ${
+              isActive('/')
+                ? 'text-primary font-semibold'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
           >
             Home
           </Link>
-          <a 
-            href="/#how-it-works" 
-            className={`nav-link ${location.hash === '#how-it-works' ? 'active' : ''}`}
+          <a
+            href="/#how-it-works"
+            className="text-on-surface-variant hover:text-on-surface transition-colors py-1"
           >
             How It Works
           </a>
-          <a 
-            href="/#features" 
-            className={`nav-link ${location.hash === '#features' ? 'active' : ''}`}
+          <a
+            href="/#features"
+            className="text-on-surface-variant hover:text-on-surface transition-colors py-1"
           >
             Features
           </a>
-          <a 
-            href="/#about" 
-            className={`nav-link ${location.hash === '#about' ? 'active' : ''}`}
+          <Link
+            to="/check"
+            className={`transition-colors py-1 ${
+              isActive('/check')
+                ? 'text-primary font-semibold'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
           >
-            About
-          </a>
-        </div>
-
-        {/* Right Actions */}
-        <div className="nav-actions">
-          {/* Theme Toggle */}
-          <button 
-            type="button" 
-            className="theme-toggle-btn"
-            onClick={toggleTheme}
-            title={isThemeDark ? "Cybersecurity Dark Shield Active" : "Default Mode"}
-            aria-label="Toggle theme appearance"
+            Check Offer
+          </Link>
+          <Link
+            to="/report"
+            className={`transition-colors py-1 ${
+              isActive('/report')
+                ? 'text-primary font-semibold'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
           >
-            {isThemeDark ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="4"></circle>
-                <path d="M12 2v2"></path><path d="M12 20v2"></path>
-                <path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path>
-                <path d="M2 12h2"></path><path d="M20 12h2"></path>
-                <path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path>
-              </svg>
-            )}
-          </button>
+            Risk Report
+          </Link>
+        </nav>
 
-          {/* Desktop Only CTA */}
-          <Link 
-            to="/check" 
-            className="btn btn-outline btn-sm desktop-btn nav-cta-btn"
+        {/* Action Controls Right */}
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Live Engine Status Pill */}
+          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-low border border-surface-variant/40">
+            <span className="relative flex h-2 w-2">
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-tertiary" />
+            </span>
+            <span className="font-mono text-xs text-tertiary">AI-Assisted Analysis</span>
+          </div>
+
+          {/* Primary Action Button */}
+          <Link
+            to="/check"
+            className="hidden md:inline-flex items-center justify-center px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#0891b2] to-[#1d4ed8] text-white font-bold text-xs shadow-[0_2px_12px_rgba(6,182,212,0.25)] hover:brightness-110 active:scale-95 transition-all"
           >
             Check an Offer
           </Link>
 
-          {/* Mobile Hamburger Button */}
-          <button 
-            className="mobile-menu-btn" 
-            onClick={toggleMobileMenu}
+          {/* Security Shield Icon Avatar */}
+          <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center shrink-0 text-primary">
+            <span className="material-symbols-outlined text-[18px]">security</span>
+          </div>
+
+          {/* Mobile Hamburger Toggle */}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="lg:hidden p-2 rounded-lg bg-surface-container text-on-surface hover:bg-surface-bright focus:outline-none"
             aria-label="Toggle navigation menu"
           >
-            <span className={`hamburger ${isMobileMenuOpen ? 'open' : ''}`}></span>
+            <span className="material-symbols-outlined text-[22px]">
+              {mobileMenuOpen ? 'close' : 'menu'}
+            </span>
           </button>
         </div>
+      </div>
 
-        {/* Mobile Slide-Out Drawer */}
-        <div className={`mobile-drawer ${isMobileMenuOpen ? 'open' : ''}`}>
-          <div className="mobile-drawer-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '800', fontSize: '1.1rem' }}>
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand-blue)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-              </svg>
-              <span>PARAKH</span>
-            </div>
-            <button 
-              type="button" 
-              onClick={closeMobileMenu}
-              className="mobile-close-btn"
-              aria-label="Close menu"
-            >
-              ✕
-            </button>
-          </div>
-
-          <div className="mobile-nav-links">
-            <Link 
-              to="/" 
-              className={`mobile-nav-link ${location.pathname === '/' && !location.hash ? 'active' : ''}`}
-              onClick={closeMobileMenu}
-            >
-              Home
-            </Link>
-            <a 
-              href="/#how-it-works" 
-              className="mobile-nav-link"
-              onClick={closeMobileMenu}
-            >
-              How It Works
-            </a>
-            <a 
-              href="/#features" 
-              className="mobile-nav-link"
-              onClick={closeMobileMenu}
-            >
-              Features
-            </a>
-            <a 
-              href="/#about" 
-              className="mobile-nav-link"
-              onClick={closeMobileMenu}
-            >
-              About
-            </a>
-          </div>
-
-          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem', paddingTop: '1.5rem' }}>
-            <Link 
-              to="/check" 
-              className="btn btn-primary"
-              onClick={closeMobileMenu}
-              style={{ width: '100%', justifyContent: 'center' }}
+      {/* Mobile Slide-down Menu */}
+      {mobileMenuOpen && (
+        <div className="lg:hidden bg-surface-container-lowest border-b border-surface-variant/40 px-4 pt-2 pb-6 space-y-3 shadow-2xl">
+          <Link
+            to="/"
+            onClick={closeMenu}
+            className={`block py-2 text-sm font-medium ${
+              isActive('/') ? 'text-primary' : 'text-on-surface-variant'
+            }`}
+          >
+            Home
+          </Link>
+          <a
+            href="/#how-it-works"
+            onClick={closeMenu}
+            className="block py-2 text-sm font-medium text-on-surface-variant hover:text-on-surface"
+          >
+            How It Works
+          </a>
+          <a
+            href="/#features"
+            onClick={closeMenu}
+            className="block py-2 text-sm font-medium text-on-surface-variant hover:text-on-surface"
+          >
+            Features
+          </a>
+          <Link
+            to="/check"
+            onClick={closeMenu}
+            className={`block py-2 text-sm font-medium ${
+              isActive('/check') ? 'text-primary' : 'text-on-surface-variant'
+            }`}
+          >
+            Check Offer
+          </Link>
+          <Link
+            to="/report"
+            onClick={closeMenu}
+            className={`block py-2 text-sm font-medium ${
+              isActive('/report') ? 'text-primary' : 'text-on-surface-variant'
+            }`}
+          >
+            Risk Report
+          </Link>
+          <div className="pt-2">
+            <Link
+              to="/check"
+              onClick={closeMenu}
+              className="w-full inline-flex items-center justify-center px-6 py-3 rounded-xl bg-gradient-to-r from-[#0891b2] to-[#1d4ed8] text-white font-bold text-[18px] shadow-[0_2px_14px_rgba(6,182,212,0.25)] hover:brightness-110 active:scale-95 transition-all"
             >
               Check an Offer
             </Link>
           </div>
         </div>
-
-        {/* Backdrop for mobile drawer */}
-        {isMobileMenuOpen && (
-          <div 
-            className="mobile-drawer-backdrop" 
-            onClick={closeMobileMenu}
-          />
-        )}
-      </nav>
+      )}
     </header>
   );
 }
-
-export default Navbar;

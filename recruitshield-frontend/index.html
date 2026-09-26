@@ -1,16 +1,133 @@
 <!doctype html>
-<html lang="en">
+<html class="dark" lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PARAKH — Verify Before You Trust | AI-Powered Job Offer Verification</title>
-    <meta name="description" content="PARAKH helps students, freshers, and job seekers identify potentially fake or risky job and internship opportunities before they trust or apply." />
+    <title>PARAKH — Verify Before You Trust | AI-Assisted Job Offer Verification</title>
+    <meta name="description" content="PARAKH forensic opportunity verification platform protects students and early-career job seekers against predatory employment scams and upfront fee traps." />
+    
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    
+    <!-- Tailwind CSS with Stitch Theme Configuration -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              surface: '#0f131d',
+              'surface-dim': '#0f131d',
+              'surface-bright': '#353944',
+              'surface-container-lowest': '#0a0e18',
+              'surface-container-low': '#171b26',
+              'surface-container': '#1c1f2a',
+              'surface-container-high': '#262a35',
+              'surface-container-highest': '#313540',
+              'on-surface': '#dfe2f1',
+              'on-surface-variant': '#bcc9cd',
+              'inverse-surface': '#dfe2f1',
+              'inverse-on-surface': '#2c303b',
+              outline: '#869397',
+              'outline-variant': '#3d494c',
+              'surface-tint': '#4cd7f6',
+              primary: '#4cd7f6',
+              'on-primary': '#003640',
+              'primary-container': '#06b6d4',
+              'on-primary-container': '#00424f',
+              'inverse-primary': '#00687a',
+              secondary: '#c0c1ff',
+              'on-secondary': '#1000a9',
+              'secondary-container': '#3131c0',
+              'on-secondary-container': '#b0b2ff',
+              tertiary: '#4edea3',
+              'on-tertiary': '#003824',
+              'tertiary-container': '#1bbd85',
+              'on-tertiary-container': '#00452e',
+              error: '#ffb4ab',
+              'on-error': '#690005',
+              'error-container': '#93000a',
+              'on-error-container': '#ffdad6',
+              'primary-fixed': '#acedff',
+              'primary-fixed-dim': '#4cd7f6',
+              'on-primary-fixed': '#001f26',
+              'on-primary-fixed-variant': '#004e5c',
+              'secondary-fixed': '#e1e0ff',
+              'secondary-fixed-dim': '#c0c1ff',
+              'on-secondary-fixed': '#07006c',
+              'on-secondary-fixed-variant': '#2f2ebe',
+              'tertiary-fixed': '#6ffbbe',
+              'tertiary-fixed-dim': '#4edea3',
+              'on-tertiary-fixed': '#002113',
+              'on-tertiary-fixed-variant': '#005236',
+              background: '#0f131d',
+              'on-background': '#dfe2f1',
+              'surface-variant': '#313540'
+            },
+            borderRadius: {
+              DEFAULT: '0.125rem',
+              sm: '0.125rem',
+              md: '0.375rem',
+              lg: '0.25rem',
+              xl: '0.5rem',
+              '2xl': '0.75rem',
+              '3xl': '1rem',
+              full: '9999px'
+            },
+            spacing: {
+              'space-2xs': '0.25rem',
+              'space-xs': '0.5rem',
+              'space-sm': '0.75rem',
+              'space-md': '1rem',
+              'space-lg': '1.5rem',
+              'space-xl': '2rem',
+              'space-2xl': '3rem',
+              gutter: '1.5rem',
+              'gutter-mobile': '1rem',
+              margin: '2rem',
+              'margin-mobile': '1rem'
+            },
+            fontFamily: {
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+              headline: ['Inter', 'system-ui', 'sans-serif'],
+              body: ['Inter', 'system-ui', 'sans-serif'],
+              code: ['JetBrains Mono', 'monospace'],
+              'headline-lg': ['Inter', 'sans-serif'],
+              'headline-md': ['Inter', 'sans-serif'],
+              'headline-sm': ['Inter', 'sans-serif'],
+              'display-lg': ['Inter', 'sans-serif'],
+              'display-lg-mobile': ['Inter', 'sans-serif'],
+              'body-lg': ['Inter', 'sans-serif'],
+              'body-md': ['Inter', 'sans-serif'],
+              'body-sm': ['Inter', 'sans-serif'],
+              'label-md': ['JetBrains Mono', 'monospace'],
+              'label-sm': ['JetBrains Mono', 'monospace'],
+              'code-sm': ['JetBrains Mono', 'monospace']
+            },
+            fontSize: {
+              'display-lg': ['2.25rem', { lineHeight: '2.75rem', letterSpacing: '-0.025em', fontWeight: '700' }],
+              'display-lg-mobile': ['1.75rem', { lineHeight: '2.25rem', letterSpacing: '-0.02em', fontWeight: '700' }],
+              'headline-lg': ['1.5rem', { lineHeight: '2rem', letterSpacing: '-0.02em', fontWeight: '600' }],
+              'headline-md': ['1.25rem', { lineHeight: '1.75rem', letterSpacing: '-0.015em', fontWeight: '600' }],
+              'headline-sm': ['1.125rem', { lineHeight: '1.5rem', letterSpacing: '-0.01em', fontWeight: '600' }],
+              'body-lg': ['1rem', { lineHeight: '1.5rem', letterSpacing: '-0.005em', fontWeight: '400' }],
+              'body-md': ['0.875rem', { lineHeight: '1.375rem', letterSpacing: '0em', fontWeight: '400' }],
+              'body-sm': ['0.75rem', { lineHeight: '1.125rem', letterSpacing: '0.005em', fontWeight: '400' }],
+              'label-md': ['0.8125rem', { lineHeight: '1.25rem', letterSpacing: '-0.01em', fontWeight: '500' }],
+              'label-sm': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.02em', fontWeight: '500' }],
+              'code-sm': ['0.75rem', { lineHeight: '1.2rem', letterSpacing: '0em', fontWeight: '400' }]
+            }
+          }
+        }
+      };
+    </script>
   </head>
-  <body>
+  <body class="bg-background font-body-md text-body-md text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-container relative min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
