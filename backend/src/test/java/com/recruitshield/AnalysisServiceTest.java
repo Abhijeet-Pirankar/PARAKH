@@ -126,4 +126,91 @@ class AnalysisServiceTest {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> analysisService.analyzeOffer(request));
         assertTrue(ex.getMessage().contains("Invalid recruiter email format"));
     }
+
+    @Test
+    @DisplayName("Integration Test: Suspicious offer with payment + suspicious recruiter + suspicious URL")
+    void testCompositeSuspiciousOffer() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Immediate joining! You must pay 3500 INR registration fee before training starts. Limited spots available.")
+                .companyName("Fast Track Corp")
+                .companyWebsite("http://fasttrack-job-verify.xyz/onboard")
+                .recruiterEmail("hr.recruiter@gmail.com")
+                .receivedVia("WhatsApp")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertEquals("HIGHLY_SUSPICIOUS", response.getStatus());
+        assertEquals("HIGH", response.getRiskLevel());
+        assertTrue(response.getRiskScore() >= 80, "Expected very high composite risk score");
+
+        // Verify URL verification structure
+        assertNotNull(response.getUrlVerification());
+        assertTrue(response.getUrlVerification().isProvided());
+        assertFalse(response.getUrlVerification().isHttps());
+        assertTrue(response.getUrlVerification().isRiskyTld());
+        assertTrue(response.getUrlVerification().isSuspiciousKeywords());
+        assertFalse(response.getUrlVerification().getRiskIndicators().isEmpty());
+
+        // Verify Recruiter verification structure
+        assertNotNull(response.getRecruiterVerification());
+        assertTrue(response.getRecruiterVerification().isEmailProvided());
+        assertTrue(response.getRecruiterVerification().isPublicFreemail());
+        assertEquals(Boolean.FALSE, response.getRecruiterVerification().getDomainMatch());
+        assertTrue(response.getRecruiterVerification().isInformalChannel());
+        assertFalse(response.getRecruiterVerification().getRiskIndicators().isEmpty());
+
+        // Verify Red flags & Recommendations
+        assertTrue(response.getRedFlags().stream().anyMatch(f -> f.contains("Advance payment") || f.contains("fee")));
+        assertTrue(response.getRedFlags().stream().anyMatch(f -> f.contains("freemail")));
+        assertTrue(response.getRedFlags().stream().anyMatch(f -> f.contains("insecure HTTP")));
+        assertTrue(response.getRedFlags().stream().anyMatch(f -> f.contains("WhatsApp")));
+        assertFalse(response.getRecommendations().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Integration Test: Normal offer with matching recruiter and company domain")
+    void testCompositeNormalOfferWithMatchingDomain() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("We are delighted to extend this offer for the position of Senior Backend Engineer after 3 rigorous technical interview rounds.")
+                .companyName("Acme Global")
+                .companyWebsite("https://acmeglobal.com/careers")
+                .recruiterEmail("talent.acquisition@acmeglobal.com")
+                .receivedVia("Email")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertEquals("LIKELY_GENUINE", response.getStatus());
+        assertEquals("LOW", response.getRiskLevel());
+        assertTrue(response.getRiskScore() < 30);
+
+        // Verify URL verification structure
+        assertNotNull(response.getUrlVerification());
+        assertTrue(response.getUrlVerification().isProvided());
+        assertTrue(response.getUrlVerification().isHttps());
+        assertTrue(response.getUrlVerification().isValid());
+        assertEquals("acmeglobal.com", response.getUrlVerification().getDomain());
+        assertFalse(response.getUrlVerification().isRiskyTld());
+        assertFalse(response.getUrlVerification().isUrlShortener());
+        assertFalse(response.getUrlVerification().getPositiveIndicators().isEmpty());
+
+        // Verify Recruiter verification structure
+        assertNotNull(response.getRecruiterVerification());
+        assertTrue(response.getRecruiterVerification().isEmailProvided());
+        assertTrue(response.getRecruiterVerification().isEmailValid());
+        assertFalse(response.getRecruiterVerification().isPublicFreemail());
+        assertEquals("acmeglobal.com", response.getRecruiterVerification().getEmailDomain());
+        assertEquals("acmeglobal.com", response.getRecruiterVerification().getCompanyDomain());
+        assertEquals(Boolean.TRUE, response.getRecruiterVerification().getDomainMatch());
+        assertFalse(response.getRecruiterVerification().isInformalChannel());
+        assertFalse(response.getRecruiterVerification().getPositiveIndicators().isEmpty());
+
+        // Verify Positive Signals
+        assertTrue(response.getPositiveSignals().stream().anyMatch(s -> s.contains("HTTPS")));
+        assertTrue(response.getPositiveSignals().stream().anyMatch(s -> s.contains("matches")));
+        assertTrue(response.getPositiveSignals().stream().anyMatch(s -> s.contains("No upfront payment")));
+    }
 }

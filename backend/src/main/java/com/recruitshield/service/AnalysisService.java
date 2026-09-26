@@ -37,21 +37,30 @@ public class AnalysisService {
 
     private final OfferRepository offerRepository;
     private final RiskReportRepository riskReportRepository;
+    private final UrlVerificationService urlVerificationService;
+    private final RecruiterVerificationService recruiterVerificationService;
 
     @Autowired
-    public AnalysisService(OfferRepository offerRepository, RiskReportRepository riskReportRepository) {
+    public AnalysisService(
+            OfferRepository offerRepository,
+            RiskReportRepository riskReportRepository,
+            UrlVerificationService urlVerificationService,
+            RecruiterVerificationService recruiterVerificationService) {
         this.offerRepository = offerRepository;
         this.riskReportRepository = riskReportRepository;
+        this.urlVerificationService = urlVerificationService != null ? urlVerificationService : new UrlVerificationService();
+        this.recruiterVerificationService = recruiterVerificationService != null ? recruiterVerificationService : new RecruiterVerificationService();
+    }
+
+    public AnalysisService(OfferRepository offerRepository, RiskReportRepository riskReportRepository) {
+        this(offerRepository, riskReportRepository, new UrlVerificationService(), new RecruiterVerificationService());
     }
 
     public AnalysisService() {
-        this(null, null);
+        this(null, null, new UrlVerificationService(), new RecruiterVerificationService());
     }
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
-    private static final Pattern EXTRACT_EMAIL_PATTERN = Pattern.compile("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}");
-    private static final Pattern FREEMAIL_PATTERN = Pattern.compile("@(gmail|yahoo|hotmail|outlook|zoho|rediffmail|protonmail|live|aol)\\.com", Pattern.CASE_INSENSITIVE);
-    private static final Pattern DISPOSABLE_EMAIL_PATTERN = Pattern.compile("@(tempmail|throwaway|guerrillamail|mailinator|yopmail|10minutemail)\\.", Pattern.CASE_INSENSITIVE);
     private static final Pattern URL_SHORTENER_PATTERN = Pattern.compile("(bit\\.ly|tinyurl\\.com|t\\.me|forms\\.gle|cutt\\.ly|is\\.gd|rb\\.gy|shorturl\\.at)", Pattern.CASE_INSENSITIVE);
     private static final Pattern RISKY_TLD_PATTERN = Pattern.compile("https?://[^\\s/]+\\.(xyz|top|tk|ml|ga|cf|gq|work|click|buzz|loan|fit)/?", Pattern.CASE_INSENSITIVE);
 
@@ -64,12 +73,17 @@ public class AnalysisService {
         String recruiterEmail = request.getRecruiterEmail() != null ? request.getRecruiterEmail().trim() : "";
         String receivedVia = request.getReceivedVia() != null ? request.getReceivedVia().trim() : "";
 
-        String normalizedText = (offerText + " " + companyName + " " + companyWebsite + " " + recruiterEmail + " " + receivedVia).toLowerCase();
+        String normalizedText = (offerText + " " + companyName + " " + companyWebsite + " " + recruiterEmail + " " + receivedVia).toLowerCase(java.util.Locale.ROOT);
 
         int score = 0;
         List<String> redFlags = new ArrayList<>();
         List<String> positiveSignals = new ArrayList<>();
         List<String> recommendations = new ArrayList<>();
+
+        // 0. Static URL and Recruiter Forensic Analysis
+        com.recruitshield.dto.UrlVerificationResult urlResult = urlVerificationService.verifyUrl(companyWebsite);
+        com.recruitshield.dto.RecruiterVerificationResult recruiterResult = recruiterVerificationService.verifyRecruiter(
+                recruiterEmail, companyWebsite, receivedVia, offerText);
 
         // 1. Advance payment & upfront fees (+40)
         boolean hasPaymentFee = checkPaymentAndFees(normalizedText, redFlags);
@@ -92,17 +106,27 @@ public class AnalysisService {
             recommendations.add("Genuine companies conduct verifiable interviews or assessments before extending a binding offer.");
         }
 
-        // 4. Suspicious Recruiter Email Domain (+25)
-        boolean hasEmailAnomaly = checkRecruiterEmail(recruiterEmail, normalizedText, redFlags);
-        if (hasEmailAnomaly) {
-            score += 25;
+        // 4. Recruiter Email Verification Findings
+        if (recruiterResult.isDisposableEmail()) {
+            score += 30;
+            redFlags.add("Recruiter uses a disposable or anonymous email address");
             recommendations.add("Verify the recruiter's identity by reaching out directly to the company's verified corporate domain.");
+        } else if (recruiterResult.isPublicFreemail()) {
+            score += 25;
+            redFlags.add("Recruiter uses a public freemail domain (@gmail/@yahoo) instead of a corporate domain");
+            recommendations.add("Verify the recruiter's identity by reaching out directly to the company's verified corporate domain.");
+        }
+        if (recruiterResult.isSuspiciousPattern()) {
+            score += 15;
+            redFlags.add("Recruiter email address exhibits automated or randomized naming patterns");
         }
 
         // 5. Recruiter Email vs Company Domain Mismatch (+25)
-        boolean hasDomainMismatch = checkDomainMismatch(companyWebsite, companyName, recruiterEmail, normalizedText, redFlags);
-        if (hasDomainMismatch) {
+        if (Boolean.FALSE.equals(recruiterResult.getDomainMatch())) {
             score += 25;
+            String emailDomain = recruiterResult.getEmailDomain() != null ? recruiterResult.getEmailDomain() : "";
+            String siteDomain = recruiterResult.getCompanyDomain() != null ? recruiterResult.getCompanyDomain() : "";
+            redFlags.add("Recruiter email domain (" + emailDomain + ") does not match official company domain (" + siteDomain + ")");
             recommendations.add("Request written communication originating strictly from the company's authorized web domain.");
         }
 
@@ -113,17 +137,41 @@ public class AnalysisService {
             recommendations.add("Be cautious of offers advertising disproportionate earnings for low-skill, part-time tasks.");
         }
 
-        // 7. Suspicious URLs / Shorteners (+20)
-        boolean hasSuspiciousUrl = checkSuspiciousUrls(companyWebsite, normalizedText, redFlags);
-        if (hasSuspiciousUrl) {
+        // 7. URL Verification Findings
+        boolean textHasSuspiciousUrl = URL_SHORTENER_PATTERN.matcher(normalizedText).find() || RISKY_TLD_PATTERN.matcher(normalizedText).find();
+        if (urlResult.isUrlShortener() || urlResult.isRiskyTld() || textHasSuspiciousUrl) {
             score += 20;
+            redFlags.add("Contains suspicious shortened URL, anonymous cloud form, or untrusted domain TLD");
             recommendations.add("Avoid clicking shortened links or submitting personal credentials on unverified third-party forms.");
+        }
+        if (urlResult.isIpAddress()) {
+            score += 20;
+            redFlags.add("Company website uses a raw IP address instead of a domain name");
+            recommendations.add("Avoid navigating to raw IP addresses or entering credentials on unverified hosts.");
+        }
+        if (urlResult.isPrivateOrLocal()) {
+            score += 25;
+            redFlags.add("Company website points to a local or private network address");
+            recommendations.add("Do not interact with websites pointing to private or internal network addresses.");
+        }
+        if (urlResult.isProvided() && !urlResult.isHttps() && urlResult.isValid()) {
+            score += 10;
+            redFlags.add("Company website uses insecure HTTP instead of encrypted HTTPS");
+            recommendations.add("Exercise caution when interacting with unencrypted websites that do not support HTTPS.");
+        }
+        if (urlResult.isExcessiveSubdomains()) {
+            score += 10;
+            redFlags.add("Company website contains an unusually high number of subdomain levels");
+        }
+        if (urlResult.isSuspiciousKeywords()) {
+            score += 15;
+            redFlags.add("Company website domain includes keywords commonly associated with credential theft or phishing");
         }
 
         // 8. Informal / Unmonitored Messaging Channel (+20)
-        boolean hasInformalChannel = checkInformalChannel(receivedVia, normalizedText, redFlags);
-        if (hasInformalChannel) {
+        if (recruiterResult.isInformalChannel()) {
             score += 20;
+            redFlags.add("Encourages recruitment communication via informal, unverified chat apps (WhatsApp/Telegram)");
             recommendations.add("Legitimate employers use formal enterprise communication rather than unmonitored chat apps.");
         }
 
@@ -141,14 +189,20 @@ public class AnalysisService {
             recommendations.add("Decline task-based or review-based commissions that require initial financial deposits.");
         }
 
-        // Determine Positive Signals
+        // Determine Positive Authenticity Signals
         if (!hasPaymentFee) {
             positiveSignals.add("No upfront payment, registration fee, or equipment deposit demanded");
         }
-        if (!companyWebsite.isEmpty() && isStandardDomain(companyWebsite)) {
+        if (urlResult.isProvided() && urlResult.isHttps() && urlResult.isValid()) {
+            positiveSignals.add("Company website uses HTTPS");
+        }
+        if (urlResult.isProvided() && urlResult.isValid() && !urlResult.isIpAddress() && !urlResult.isUrlShortener() && !urlResult.isRiskyTld()) {
             positiveSignals.add("Company website provided with standard web domain");
         }
-        if (!recruiterEmail.isEmpty() && !FREEMAIL_PATTERN.matcher(recruiterEmail).find() && !DISPOSABLE_EMAIL_PATTERN.matcher(recruiterEmail).find()) {
+        if (Boolean.TRUE.equals(recruiterResult.getDomainMatch())) {
+            positiveSignals.add("Recruiter email domain matches the provided company website domain");
+        }
+        if (recruiterResult.isEmailProvided() && !recruiterResult.isPublicFreemail() && !recruiterResult.isDisposableEmail() && recruiterResult.isEmailValid()) {
             positiveSignals.add("Recruiter contacted from an enterprise corporate email domain");
         }
         if (normalizedText.contains("interview round") || normalizedText.contains("technical interview") || normalizedText.contains("coding assessment") || normalizedText.contains("panel interview")) {
@@ -217,6 +271,8 @@ public class AnalysisService {
                 .recommendations(recommendations)
                 .recommendation(recommendations.get(0))
                 .analysisSummary(analysisSummary)
+                .urlVerification(urlResult)
+                .recruiterVerification(recruiterResult)
                 .build();
     }
 
@@ -297,57 +353,6 @@ public class AnalysisService {
         return match;
     }
 
-    private boolean checkRecruiterEmail(String email, String text, List<String> redFlags) {
-        boolean foundFreemail = false;
-        boolean foundDisposable = false;
-
-        if (!email.isEmpty()) {
-            if (FREEMAIL_PATTERN.matcher(email).find()) {
-                foundFreemail = true;
-            }
-            if (DISPOSABLE_EMAIL_PATTERN.matcher(email).find()) {
-                foundDisposable = true;
-            }
-        } else {
-            Matcher matcher = EXTRACT_EMAIL_PATTERN.matcher(text);
-            while (matcher.find()) {
-                String candidate = matcher.group();
-                if (FREEMAIL_PATTERN.matcher(candidate).find()) {
-                    foundFreemail = true;
-                }
-                if (DISPOSABLE_EMAIL_PATTERN.matcher(candidate).find()) {
-                    foundDisposable = true;
-                }
-            }
-        }
-
-        if (foundDisposable) {
-            redFlags.add("Recruiter uses a disposable or anonymous email address");
-            return true;
-        } else if (foundFreemail) {
-            redFlags.add("Recruiter uses a public freemail domain (@gmail/@yahoo) instead of a corporate domain");
-            return true;
-        }
-        return false;
-    }
-
-    private boolean checkDomainMismatch(String companyWebsite, String companyName, String recruiterEmail, String text, List<String> redFlags) {
-        if (recruiterEmail.isEmpty() || companyWebsite.isEmpty()) {
-            return false;
-        }
-
-        String emailDomain = extractDomainFromEmail(recruiterEmail);
-        String siteDomain = extractDomainFromUrl(companyWebsite);
-
-        if (!emailDomain.isEmpty() && !siteDomain.isEmpty()) {
-            if (!emailDomain.equalsIgnoreCase(siteDomain) && !siteDomain.endsWith("." + emailDomain) && !emailDomain.endsWith("." + siteDomain)) {
-                redFlags.add("Recruiter email domain (" + emailDomain + ") does not match official company domain (" + siteDomain + ")");
-                return true;
-            }
-        }
-        return false;
-    }
-
     private boolean checkUnrealisticCompensation(String text, List<String> redFlags) {
         boolean match = text.contains("earn 50000 per day") ||
                 text.contains("earn 10000 daily") ||
@@ -359,36 +364,6 @@ public class AnalysisService {
 
         if (match) {
             redFlags.add("Promises unrealistic salary or daily payouts disproportionate to qualifications");
-        }
-        return match;
-    }
-
-    private boolean checkSuspiciousUrls(String website, String text, List<String> redFlags) {
-        boolean match = false;
-        if (!website.isEmpty()) {
-            if (URL_SHORTENER_PATTERN.matcher(website).find() || RISKY_TLD_PATTERN.matcher(website).find()) {
-                match = true;
-            }
-        }
-        if (URL_SHORTENER_PATTERN.matcher(text).find() || RISKY_TLD_PATTERN.matcher(text).find()) {
-            match = true;
-        }
-
-        if (match) {
-            redFlags.add("Contains suspicious shortened URL, anonymous cloud form, or untrusted domain TLD");
-        }
-        return match;
-    }
-
-    private boolean checkInformalChannel(String receivedVia, String text, List<String> redFlags) {
-        boolean match = (receivedVia != null && (receivedVia.equalsIgnoreCase("WhatsApp") || receivedVia.equalsIgnoreCase("Telegram"))) ||
-                text.contains("contact on whatsapp") ||
-                text.contains("join telegram") ||
-                text.contains("telegram group") ||
-                text.contains("whatsapp hr");
-
-        if (match) {
-            redFlags.add("Encourages recruitment communication via informal, unverified chat apps (WhatsApp/Telegram)");
         }
         return match;
     }
@@ -421,35 +396,6 @@ public class AnalysisService {
             redFlags.add("Exhibits characteristics of task-based commission or prepaid investment scams");
         }
         return match;
-    }
-
-    private String extractDomainFromEmail(String email) {
-        int atIndex = email.indexOf('@');
-        if (atIndex != -1 && atIndex < email.length() - 1) {
-            return email.substring(atIndex + 1).toLowerCase().trim();
-        }
-        return "";
-    }
-
-    private String extractDomainFromUrl(String url) {
-        try {
-            String clean = url.trim();
-            if (!clean.startsWith("http://") && !clean.startsWith("https://")) {
-                clean = "https://" + clean;
-            }
-            URI uri = new URI(clean);
-            String host = uri.getHost();
-            if (host != null) {
-                return host.startsWith("www.") ? host.substring(4).toLowerCase() : host.toLowerCase();
-            }
-        } catch (Exception ignored) {
-        }
-        return "";
-    }
-
-    private boolean isStandardDomain(String url) {
-        String domain = extractDomainFromUrl(url);
-        return !domain.isEmpty() && !URL_SHORTENER_PATTERN.matcher(domain).find() && !domain.endsWith(".xyz") && !domain.endsWith(".top");
     }
 
     private String determineStatus(int score) {

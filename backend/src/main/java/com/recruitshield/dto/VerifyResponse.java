@@ -66,4 +66,14 @@ public class VerifyResponse {
      * High-level executive synthesis of the risk assessment.
      */
     private String analysisSummary;
+
+    /**
+     * Structured forensic analysis of company URL / website.
+     */
+    private UrlVerificationResult urlVerification;
+
+    /**
+     * Structured forensic analysis of recruiter email and communication channel.
+     */
+    private RecruiterVerificationResult recruiterVerification;
 }

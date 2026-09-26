@@ -46,7 +46,10 @@ class AnalysisControllerTest {
                 .andExpect(jsonPath("$.redFlags", not(empty())))
                 .andExpect(jsonPath("$.positiveSignals", notNullValue()))
                 .andExpect(jsonPath("$.recommendations", not(empty())))
-                .andExpect(jsonPath("$.analysisSummary", notNullValue()));
+                .andExpect(jsonPath("$.analysisSummary", notNullValue()))
+                .andExpect(jsonPath("$.urlVerification", notNullValue()))
+                .andExpect(jsonPath("$.recruiterVerification", notNullValue()))
+                .andExpect(jsonPath("$.recruiterVerification.publicFreemail", is(true)));
     }
 
     @Test
