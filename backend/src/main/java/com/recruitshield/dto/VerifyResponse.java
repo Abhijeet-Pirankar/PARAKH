@@ -24,6 +24,26 @@ public class VerifyResponse {
     private int score;
 
     /**
+     * Pure rule-based heuristic risk score before AI contribution.
+     */
+    private int ruleBasedScore;
+
+    /**
+     * ML risk probability predicted by Python AI service (0.0 to 1.0). Null if unavailable.
+     */
+    private Double aiRiskProbability;
+
+    /**
+     * ML classification: 'SUSPICIOUS' or 'LEGITIMATE'. Null if unavailable.
+     */
+    private String aiClassification;
+
+    /**
+     * Indicates whether Python AI service was available and contributed to the assessment.
+     */
+    private boolean aiAnalysisAvailable;
+
+    /**
      * Risk assessment classification: LIKELY_GENUINE, NEEDS_VERIFICATION, or HIGHLY_SUSPICIOUS.
      */
     private String status;

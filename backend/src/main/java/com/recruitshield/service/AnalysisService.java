@@ -39,25 +39,36 @@ public class AnalysisService {
     private final RiskReportRepository riskReportRepository;
     private final UrlVerificationService urlVerificationService;
     private final RecruiterVerificationService recruiterVerificationService;
+    private final AiServiceClient aiServiceClient;
 
     @Autowired
     public AnalysisService(
             OfferRepository offerRepository,
             RiskReportRepository riskReportRepository,
             UrlVerificationService urlVerificationService,
-            RecruiterVerificationService recruiterVerificationService) {
+            RecruiterVerificationService recruiterVerificationService,
+            AiServiceClient aiServiceClient) {
         this.offerRepository = offerRepository;
         this.riskReportRepository = riskReportRepository;
         this.urlVerificationService = urlVerificationService != null ? urlVerificationService : new UrlVerificationService();
         this.recruiterVerificationService = recruiterVerificationService != null ? recruiterVerificationService : new RecruiterVerificationService();
+        this.aiServiceClient = aiServiceClient;
+    }
+
+    public AnalysisService(
+            OfferRepository offerRepository,
+            RiskReportRepository riskReportRepository,
+            UrlVerificationService urlVerificationService,
+            RecruiterVerificationService recruiterVerificationService) {
+        this(offerRepository, riskReportRepository, urlVerificationService, recruiterVerificationService, null);
     }
 
     public AnalysisService(OfferRepository offerRepository, RiskReportRepository riskReportRepository) {
-        this(offerRepository, riskReportRepository, new UrlVerificationService(), new RecruiterVerificationService());
+        this(offerRepository, riskReportRepository, new UrlVerificationService(), new RecruiterVerificationService(), null);
     }
 
     public AnalysisService() {
-        this(null, null, new UrlVerificationService(), new RecruiterVerificationService());
+        this(null, null, new UrlVerificationService(), new RecruiterVerificationService(), null);
     }
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
@@ -212,12 +223,49 @@ public class AnalysisService {
             positiveSignals.add("Offer originated through standard professional recruitment avenue");
         }
 
-        // Cap score at 100
-        int riskScore = Math.min(100, Math.max(0, score));
+        // Cap rule-based score at 100
+        int ruleBasedScore = Math.min(100, Math.max(0, score));
 
-        String status = determineStatus(riskScore);
-        String riskLevel = determineRiskLevel(riskScore);
-        String analysisSummary = determineSummary(riskScore, redFlags.size());
+        // Evaluate with Python AI Service (if configured and available)
+        java.util.Optional<com.recruitshield.dto.AiPredictionResponse> aiResult = java.util.Optional.empty();
+        if (aiServiceClient != null) {
+            try {
+                aiResult = aiServiceClient.predict(offerText);
+            } catch (Exception ex) {
+                log.warn("AI service invocation threw exception: {}. Continuing with rule-based fallback.", ex.getMessage());
+            }
+        }
+
+        boolean aiAnalysisAvailable = false;
+        Double aiRiskProbability = null;
+        String aiClassification = null;
+        int finalRiskScore;
+
+        if (aiResult.isPresent() && aiResult.get().getRiskProbability() != null) {
+            aiAnalysisAvailable = true;
+            com.recruitshield.dto.AiPredictionResponse ai = aiResult.get();
+            aiRiskProbability = ai.getRiskProbability();
+            aiClassification = ai.getClassification();
+
+            // Transparent Bounded Risk Combination Formula:
+            // finalRiskScore = 70% existing rule-based score + 30% AI probability contribution (scaled 0-100)
+            int aiScore = (int) Math.round(aiRiskProbability * 100.0);
+            finalRiskScore = (int) Math.round((0.70 * ruleBasedScore) + (0.30 * aiScore));
+            finalRiskScore = Math.min(100, Math.max(0, finalRiskScore));
+
+            if ("SUSPICIOUS".equalsIgnoreCase(aiClassification) && aiRiskProbability >= 0.50) {
+                redFlags.add("AI model flagged offer text as suspicious (" + Math.round(aiRiskProbability * 100) + "% risk probability)");
+            } else if ("LEGITIMATE".equalsIgnoreCase(aiClassification) && aiRiskProbability < 0.50) {
+                positiveSignals.add("AI model classified offer text as legitimate (" + Math.round((1.0 - aiRiskProbability) * 100) + "% confidence)");
+            }
+        } else {
+            // Fallback: Use pure rule-based score when AI service is unavailable
+            finalRiskScore = ruleBasedScore;
+        }
+
+        String status = determineStatus(finalRiskScore);
+        String riskLevel = determineRiskLevel(finalRiskScore);
+        String analysisSummary = determineSummary(finalRiskScore, redFlags.size(), aiAnalysisAvailable);
 
         // Default safety recommendations if none triggered
         if (recommendations.isEmpty()) {
@@ -242,7 +290,7 @@ public class AnalysisService {
 
                 RiskReport riskReport = RiskReport.builder()
                         .offer(savedOffer)
-                        .riskScore(riskScore)
+                        .riskScore(finalRiskScore)
                         .status(status)
                         .riskLevel(riskLevel)
                         .summary(analysisSummary)
@@ -261,8 +309,12 @@ public class AnalysisService {
         }
 
         return VerifyResponse.builder()
-                .riskScore(riskScore)
-                .score(riskScore)
+                .riskScore(finalRiskScore)
+                .score(finalRiskScore)
+                .ruleBasedScore(ruleBasedScore)
+                .aiRiskProbability(aiRiskProbability)
+                .aiClassification(aiClassification)
+                .aiAnalysisAvailable(aiAnalysisAvailable)
                 .status(status)
                 .riskLevel(riskLevel)
                 .redFlags(redFlags.isEmpty() ? List.of("No obvious red flags detected in this text.") : redFlags)
@@ -283,6 +335,9 @@ public class AnalysisService {
         String text = request.getEffectiveOfferText();
         if (text.isEmpty()) {
             throw new IllegalArgumentException("Offer text cannot be empty or blank.");
+        }
+        if (text.length() > 50000) {
+            throw new IllegalArgumentException("Offer text exceeds maximum supported size (50,000 characters).");
         }
         if (request.getRecruiterEmail() != null && !request.getRecruiterEmail().trim().isEmpty()) {
             String email = request.getRecruiterEmail().trim();
@@ -418,13 +473,18 @@ public class AnalysisService {
         }
     }
 
-    private String determineSummary(int score, int flagCount) {
+    private String determineSummary(int score, int flagCount, boolean aiAvailable) {
+        String aiSuffix = aiAvailable ? " (incorporating heuristic rules & AI ML signals)" : "";
         if (score < 30) {
-            return "The offer exhibits standard recruitment patterns with no major red flags detected.";
+            return "The offer exhibits standard recruitment patterns with no major red flags detected." + aiSuffix;
         } else if (score < 60) {
-            return "The offer contains " + flagCount + " potential indicator(s) requiring candidate verification before proceeding.";
+            return "The offer contains " + flagCount + " potential indicator(s) requiring candidate verification before proceeding." + aiSuffix;
         } else {
-            return "The offer contains multiple severe indicators (" + flagCount + " red flags) that require immediate caution.";
+            return "The offer contains multiple severe indicators (" + flagCount + " red flags) that require immediate caution." + aiSuffix;
         }
+    }
+
+    private String determineSummary(int score, int flagCount) {
+        return determineSummary(score, flagCount, false);
     }
 }
