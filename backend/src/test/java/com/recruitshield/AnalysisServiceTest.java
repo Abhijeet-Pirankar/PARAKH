@@ -213,4 +213,74 @@ class AnalysisServiceTest {
         assertTrue(response.getPositiveSignals().stream().anyMatch(s -> s.contains("matches")));
         assertTrue(response.getPositiveSignals().stream().anyMatch(s -> s.contains("No upfront payment")));
     }
+
+    @Test
+    @DisplayName("10. Detects task-based recruitment and prepaid investment commission scams")
+    void testTaskBasedCommissionScamDetection() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Earn part time daily income! YouTube video like and hotel review task. Commission on investment paid daily.")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertTrue(response.getRedFlags().stream()
+                .anyMatch(f -> f.toLowerCase().contains("task-based commission") || f.toLowerCase().contains("investment scams")),
+                "Should identify task scam language");
+        assertTrue(response.getRecommendations().stream()
+                .anyMatch(r -> r.toLowerCase().contains("task-based") || r.toLowerCase().contains("review-based")),
+                "Should provide task scam safety recommendation");
+    }
+
+    @Test
+    @DisplayName("11. Detects sensitive credential and OTP phishing attempts")
+    void testCredentialAndOtpPhishingDetection() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("To finalize onboarding, share your net banking password and verify the OTP sent to your phone.")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertTrue(response.getRiskScore() >= 40);
+        assertTrue(response.getRedFlags().stream()
+                .anyMatch(f -> f.toLowerCase().contains("financial credentials") || f.toLowerCase().contains("otp")),
+                "Should identify credential phishing attempt");
+        assertTrue(response.getRecommendations().stream()
+                .anyMatch(r -> r.toLowerCase().contains("net banking passwords") || r.toLowerCase().contains("otp")),
+                "Should provide credential safety recommendation");
+    }
+
+    @Test
+    @DisplayName("12. Detects unrealistic compensation and daily payout claims")
+    void testUnrealisticSalaryClaims() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Guaranteed income without skills! Earn 50000 per day with daily payout. High income minimal work.")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertTrue(response.getRedFlags().stream()
+                .anyMatch(f -> f.toLowerCase().contains("unrealistic salary") || f.toLowerCase().contains("daily payouts")),
+                "Should identify unrealistic compensation claims");
+    }
+
+    @Test
+    @DisplayName("13. Enforces strict 0-100 ceiling bounds on cumulative rule-based scores")
+    void testRuleScoreCeiling() {
+        // Triggers: payment (+40) + phishing (+40) + instant joining (+30) + task scam (+20) + unrealistic comp (+25) + urgency (+15) = 170 raw
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Urgent hiring! Direct selection without interview. Pay Rs 2500 registration fee. " +
+                        "Share your net banking password and OTP. Earn 50000 per day with YouTube video like tasks. Limited spots today only!")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertEquals(100, response.getRuleBasedScore(), "Rule-based score must be capped at 100");
+        assertEquals(100, response.getRiskScore(), "Final risk score must be capped at 100");
+        assertEquals("HIGHLY_SUSPICIOUS", response.getStatus());
+        assertEquals("HIGH", response.getRiskLevel());
+    }
 }

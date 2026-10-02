@@ -4,12 +4,14 @@ import com.recruitshield.entity.Offer;
 import com.recruitshield.entity.RiskReport;
 import com.recruitshield.repository.OfferRepository;
 import com.recruitshield.repository.RiskReportRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,6 +25,21 @@ class OfferPersistenceTest {
 
     @Autowired
     private RiskReportRepository riskReportRepository;
+
+    private final List<Long> trackedOfferIds = new ArrayList<>();
+
+    @AfterEach
+    void tearDown() {
+        for (Long offerId : trackedOfferIds) {
+            try {
+                if (offerRepository.existsById(offerId)) {
+                    offerRepository.deleteById(offerId);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        trackedOfferIds.clear();
+    }
 
     @Test
     @DisplayName("Should successfully persist and retrieve Offer entity")
@@ -38,6 +55,7 @@ class OfferPersistenceTest {
 
         Offer saved = offerRepository.save(offer);
         assertNotNull(saved.getId(), "Offer ID should be generated");
+        trackedOfferIds.add(saved.getId());
 
         Optional<Offer> fetched = offerRepository.findById(saved.getId());
         assertTrue(fetched.isPresent(), "Offer should be found in DB");
@@ -61,6 +79,7 @@ class OfferPersistenceTest {
                 .build();
 
         Offer savedOffer = offerRepository.save(offer);
+        trackedOfferIds.add(savedOffer.getId());
 
         RiskReport report = RiskReport.builder()
                 .offer(savedOffer)

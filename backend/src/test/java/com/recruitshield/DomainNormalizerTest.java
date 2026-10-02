@@ -74,4 +74,49 @@ class DomainNormalizerTest {
         assertTrue(DomainNormalizer.isPrivateOrLocal("dev.company.local"));
         assertFalse(DomainNormalizer.isPrivateOrLocal("google.com"));
     }
+
+    @Test
+    @DisplayName("6. Strips enclosing quotes, userinfo credentials, and ports from hostnames")
+    void testNormalizeHostEnclosingQuotesAndObfuscation() {
+        assertEquals("example.com", DomainNormalizer.normalizeHost("\"https://www.example.com/careers\""));
+        assertEquals("corp.example.org", DomainNormalizer.normalizeHost("'https://corp.example.org'"));
+        assertEquals("secure.portal.com", DomainNormalizer.normalizeHost("https://user:pass123@secure.portal.com/login"));
+        assertEquals("careers.site.com", DomainNormalizer.normalizeHost("http://careers.site.com:8443/apply"));
+        assertEquals("example.com", DomainNormalizer.normalizeHost("https://example.com./careers"));
+    }
+
+    @Test
+    @DisplayName("7. Preserves multi-part ccTLD boundaries across international domains")
+    void testExtractRootDomainMultiPartCcTlds() {
+        // Australia
+        assertEquals("dept.gov.au", DomainNormalizer.extractRootDomain("jobs.dept.gov.au"));
+        // UK
+        assertEquals("oxford.ac.uk", DomainNormalizer.extractRootDomain("careers.oxford.ac.uk"));
+        // India
+        assertEquals("delhi.gov.in", DomainNormalizer.extractRootDomain("recruit.delhi.gov.in"));
+        assertEquals("iitd.ac.in", DomainNormalizer.extractRootDomain("portal.iitd.ac.in"));
+        // Brazil
+        assertEquals("empresa.com.br", DomainNormalizer.extractRootDomain("trabalhe.empresa.com.br"));
+        // Japan
+        assertEquals("sony.co.jp", DomainNormalizer.extractRootDomain("careers.sony.co.jp"));
+    }
+
+    @Test
+    @DisplayName("8. Verifies Class B (172.16-31.x.x), IPv6 loopback, and internal TLDs")
+    void testPrivateNetworkSubnetsComprehensive() {
+        // Class B Private Range (172.16.0.0 - 172.31.255.255)
+        assertTrue(DomainNormalizer.isPrivateOrLocal("172.16.0.1"));
+        assertTrue(DomainNormalizer.isPrivateOrLocal("172.24.50.10"));
+        assertTrue(DomainNormalizer.isPrivateOrLocal("172.31.255.255"));
+
+        // Public IPs on 172.x boundary
+        assertFalse(DomainNormalizer.isPrivateOrLocal("172.15.255.255"));
+        assertFalse(DomainNormalizer.isPrivateOrLocal("172.32.0.1"));
+
+        // Special addresses
+        assertTrue(DomainNormalizer.isPrivateOrLocal("::1"));
+        assertTrue(DomainNormalizer.isPrivateOrLocal("0.0.0.0"));
+        assertTrue(DomainNormalizer.isPrivateOrLocal("service.internal"));
+        assertTrue(DomainNormalizer.isPrivateOrLocal("backend.test"));
+    }
 }

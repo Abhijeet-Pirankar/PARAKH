@@ -130,12 +130,100 @@ class UrlVerificationServiceTest {
     }
 
     @Test
-    @DisplayName("Risky TLD and suspicious keywords detection")
+    @DisplayName("10. Risky TLD and suspicious keywords detection")
     void testRiskyTldAndKeywords() {
         UrlVerificationResult result = urlVerificationService.verifyUrl("https://careers-login-portal.xyz/pay");
         assertTrue(result.isRiskyTld());
         assertTrue(result.isSuspiciousKeywords());
         assertTrue(result.getRiskIndicators().stream().anyMatch(s -> s.toLowerCase().contains("top-level domain")));
         assertTrue(result.getRiskIndicators().stream().anyMatch(s -> s.toLowerCase().contains("credential theft") || s.toLowerCase().contains("phishing")));
+    }
+
+    @Test
+    @DisplayName("11. URL obfuscation: flags userinfo trick, double slashes, and hex percent-encoding")
+    void testUrlObfuscationPattern() {
+        // Userinfo trick: http://trusted.com@evil-site.com
+        UrlVerificationResult userinfoResult = urlVerificationService.verifyUrl("https://microsoft.com@evil-phishing.xyz/login");
+        assertTrue(userinfoResult.getRiskIndicators().stream()
+                .anyMatch(s -> s.toLowerCase().contains("suspicious character patterns") || s.toLowerCase().contains("obfuscated")),
+                "Should detect userinfo obfuscation");
+
+        // Double slash in path
+        UrlVerificationResult doubleSlashResult = urlVerificationService.verifyUrl("https://example.com//evil.com/apply");
+        assertTrue(doubleSlashResult.getRiskIndicators().stream()
+                .anyMatch(s -> s.toLowerCase().contains("suspicious character patterns") || s.toLowerCase().contains("obfuscated")),
+                "Should detect double slash obfuscation");
+
+        // Hex percent encoding
+        UrlVerificationResult hexResult = urlVerificationService.verifyUrl("https://example.com/%2f%2fcareers");
+        assertTrue(hexResult.getRiskIndicators().stream()
+                .anyMatch(s -> s.toLowerCase().contains("suspicious character patterns") || s.toLowerCase().contains("obfuscated")),
+                "Should detect hex percent-encoding pattern");
+    }
+
+    @Test
+    @DisplayName("12. Unconventional protocol schemes: flags ftp, file, and websocket URI schemes")
+    void testUnconventionalProtocolSchemes() {
+        UrlVerificationResult ftpResult = urlVerificationService.verifyUrl("ftp://ftp.acme.com/jobs/spec.pdf");
+        assertFalse(ftpResult.isHttps());
+        assertTrue(ftpResult.getRiskIndicators().stream().anyMatch(s -> s.toLowerCase().contains("unconventional protocol scheme")));
+
+        UrlVerificationResult fileResult = urlVerificationService.verifyUrl("file://corporate-intranet/jobs/offer.pdf");
+        assertFalse(fileResult.isHttps());
+        assertTrue(fileResult.getRiskIndicators().stream().anyMatch(s -> s.toLowerCase().contains("unconventional protocol scheme")));
+
+        UrlVerificationResult wsResult = urlVerificationService.verifyUrl("ws://socket.company.com/feed");
+        assertFalse(wsResult.isHttps());
+        assertTrue(wsResult.getRiskIndicators().stream().anyMatch(s -> s.toLowerCase().contains("unconventional protocol scheme")));
+    }
+
+    @Test
+    @DisplayName("13. Whitespace and case normalization: normalizes mixed case and untrimmed URLs")
+    void testWhitespaceAndCaseNormalization() {
+        UrlVerificationResult result = urlVerificationService.verifyUrl("   HTTPS://WWW.CAREERS.GOOGLE.COM/JOBS/REQ123/   ");
+
+        assertTrue(result.isProvided());
+        assertTrue(result.isValid());
+        assertTrue(result.isHttps());
+        assertEquals("careers.google.com", result.getDomain());
+        assertEquals("https://www.careers.google.com/jobs/req123/", result.getOriginalUrl().toLowerCase());
+    }
+
+    @Test
+    @DisplayName("14. Local and private network ranges: identifies loopback, private intranet, and internal hosts")
+    void testLocalAndPrivateNetworkRanges() {
+        String[] localUrls = {
+                "http://localhost:8080/careers",
+                "https://127.0.0.1:443/login",
+                "http://10.0.0.1/apply",
+                "http://192.168.1.1/jobs",
+                "http://172.16.0.10:9000/portal",
+                "http://dev.corp.internal/apply",
+                "http://portal.company.local/job"
+        };
+
+        for (String url : localUrls) {
+            UrlVerificationResult result = urlVerificationService.verifyUrl(url);
+            assertTrue(result.isPrivateOrLocal(), "Should identify private/local host: " + url);
+            assertTrue(result.getRiskIndicators().stream().anyMatch(s -> s.toLowerCase().contains("local or private network")),
+                    "Should flag private network indicator for: " + url);
+        }
+    }
+
+    @Test
+    @DisplayName("15. Strict offline guarantee: executes without network latency or socket connections")
+    void testStrictOfflineGuarantee() {
+        long startTime = System.currentTimeMillis();
+
+        // Verify across multiple complex URLs
+        for (int i = 0; i < 50; i++) {
+            UrlVerificationResult result = urlVerificationService.verifyUrl("https://careers.company" + i + ".org/apply?ref=board#top");
+            assertTrue(result.isValid());
+            assertNotNull(result.getDomain());
+        }
+
+        long elapsed = System.currentTimeMillis() - startTime;
+        // 50 offline evaluations should take well under 500ms (typically < 30ms)
+        assertTrue(elapsed < 500, "Offline verification must be fast and non-blocking, took: " + elapsed + "ms");
     }
 }

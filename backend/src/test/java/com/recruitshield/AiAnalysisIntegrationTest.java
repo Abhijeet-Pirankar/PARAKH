@@ -282,4 +282,77 @@ class AiAnalysisIntegrationTest {
         assertEquals("NEEDS_VERIFICATION", response.getStatus());
         assertTrue(response.getAnalysisSummary().contains("AI ML signals"));
     }
+
+    @Test
+    @DisplayName("11. AI Timeout: ResourceAccessException during AI invocation falls back gracefully to rule score")
+    void testAiTimeoutGracefulFallback() {
+        when(mockAiClient.predict(anyString()))
+                .thenThrow(new org.springframework.web.client.ResourceAccessException("I/O error on POST request: Read timed out"));
+
+        AnalysisService service = new AnalysisService(null, null, urlService, recruiterService, mockAiClient);
+
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Standard software engineer offer letter with CTC 8.0 LPA.")
+                .companyName("TechCorp")
+                .companyWebsite("https://techcorp.com")
+                .recruiterEmail("careers@techcorp.com")
+                .build();
+
+        VerifyResponse response = service.analyzeOffer(request);
+
+        assertNotNull(response, "Response must not be null when AI times out");
+        assertFalse(response.isAiAnalysisAvailable(), "AI analysis must be marked unavailable on timeout");
+        assertNull(response.getAiRiskProbability(), "AI risk probability must be null on timeout");
+        assertNull(response.getAiClassification(), "AI classification must be null on timeout");
+        assertEquals(response.getRuleBasedScore(), response.getRiskScore(), "Risk score must fall back to rule-based score");
+        assertFalse(response.getAnalysisSummary().contains("AI ML signals"), "Summary must not indicate AI signals on timeout");
+    }
+
+    @Test
+    @DisplayName("12. AI HTTP Error (4xx/5xx): Analysis returns full standard PARAKH contract on AI outage")
+    void testAiHttpErrorFallbackContract() {
+        // AI returns empty due to 4xx or 5xx from Python service
+        when(mockAiClient.predict(anyString())).thenReturn(Optional.empty());
+
+        AnalysisService service = new AnalysisService(null, null, urlService, recruiterService, mockAiClient);
+
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Immediate joining! No interview needed. Pay Rs 1500 registration fee.")
+                .recruiterEmail("recruiter@gmail.com")
+                .receivedVia("WhatsApp")
+                .build();
+
+        VerifyResponse response = service.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertFalse(response.isAiAnalysisAvailable());
+        assertEquals(response.getRuleBasedScore(), response.getRiskScore());
+        assertNotNull(response.getStatus(), "Status must be populated");
+        assertNotNull(response.getRiskLevel(), "Risk level must be populated");
+        assertNotNull(response.getRecommendations(), "Recommendations must be populated");
+        assertFalse(response.getRecommendations().isEmpty());
+        assertNotNull(response.getRedFlags(), "Red flags must be populated");
+        assertFalse(response.getRedFlags().isEmpty());
+        assertNotNull(response.getUrlVerification());
+        assertNotNull(response.getRecruiterVerification());
+    }
+
+    @Test
+    @DisplayName("13. Unexpected runtime exception: Caught inside AnalysisService without crashing API")
+    void testAiUnexpectedRuntimeExceptionFallback() {
+        when(mockAiClient.predict(anyString()))
+                .thenThrow(new IllegalStateException("Simulated unexpected thread or client error"));
+
+        AnalysisService service = new AnalysisService(null, null, urlService, recruiterService, mockAiClient);
+
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Junior developer role. Apply with your GitHub profile.")
+                .build();
+
+        VerifyResponse response = service.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertFalse(response.isAiAnalysisAvailable());
+        assertEquals(response.getRuleBasedScore(), response.getRiskScore());
+    }
 }
