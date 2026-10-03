@@ -1,0 +1,33 @@
+# Build output
+target/
+*.jar
+*.war
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+
+# Logs and temp files
+*.log
+logs/
+temp/
+tmp/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Documentation and scratch files
+HELP.md
