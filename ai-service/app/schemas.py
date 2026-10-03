@@ -26,7 +26,7 @@ class PredictResponse(BaseModel):
     )
     classification: str = Field(
         ...,
-        description="Categorical risk prediction: 'SUSPICIOUS' or 'LEGITIMATE'."
+        description="Categorical risk prediction: 'SUSPICIOUS', 'LEGITIMATE', or 'UNCERTAIN'."
     )
     model: str = Field(
         default="tfidf-logistic-regression",

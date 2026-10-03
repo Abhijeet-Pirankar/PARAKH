@@ -82,8 +82,25 @@ def test_predict_probability_bounds_and_classification_validity(client):
     assert response.status_code == 200
     data = response.json()
     assert 0.0 <= data["riskProbability"] <= 1.0
-    assert data["classification"] in ("LEGITIMATE", "SUSPICIOUS")
+    assert data["classification"] in ("LEGITIMATE", "SUSPICIOUS", "UNCERTAIN")
     assert data["model"] == "tfidf-logistic-regression"
+
+
+def test_predict_uncertain_classification(client):
+    """Verify that an offer around 0.50 probability returns UNCERTAIN classification."""
+    payload = {
+        "offerText": (
+            "Congratulations! You have been shortlisted for a Software Developer Internship at TechNova Solutions.\n"
+            "Your interview will be conducted online through Google Meet. There is no registration fee or payment required.\n"
+            "Please visit our official website https://www.technovasolutions.com to learn more about the company and internship.\n"
+            "Regards, HR Team TechNova Solutions hr@technovasolutions.com"
+        )
+    }
+    response = client.post("/predict", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert 0.40 <= data["riskProbability"] < 0.60
+    assert data["classification"] == "UNCERTAIN"
 
 
 def test_predict_empty_offer_text(client):
@@ -184,5 +201,5 @@ def test_predict_robustness_special_characters(client):
     assert response.status_code == 200
     data = response.json()
     assert 0.0 <= data["riskProbability"] <= 1.0
-    assert data["classification"] in ("LEGITIMATE", "SUSPICIOUS")
+    assert data["classification"] in ("LEGITIMATE", "SUSPICIOUS", "UNCERTAIN")
     assert data["model"] == "tfidf-logistic-regression"

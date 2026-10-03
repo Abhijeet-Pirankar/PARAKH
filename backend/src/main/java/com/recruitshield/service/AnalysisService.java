@@ -6,6 +6,7 @@ import com.recruitshield.entity.Offer;
 import com.recruitshield.entity.RiskReport;
 import com.recruitshield.repository.OfferRepository;
 import com.recruitshield.repository.RiskReportRepository;
+import com.recruitshield.util.ProtectiveContextDetector;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -253,10 +254,16 @@ public class AnalysisService {
             finalRiskScore = (int) Math.round((0.70 * ruleBasedScore) + (0.30 * aiScore));
             finalRiskScore = Math.min(100, Math.max(0, finalRiskScore));
 
-            if ("SUSPICIOUS".equalsIgnoreCase(aiClassification) && aiRiskProbability >= 0.50) {
+            // Transparent Threshold Policy:
+            // >= 0.60 -> SUSPICIOUS (adds red flag)
+            // < 0.40 -> LEGITIMATE (adds positive signal if classified as legitimate)
+            // 0.40 - 0.59 -> UNCERTAIN (treated as neutral additional signal, no red flag generated)
+            if ("SUSPICIOUS".equalsIgnoreCase(aiClassification) && aiRiskProbability >= 0.60) {
                 redFlags.add("AI model flagged offer text as suspicious (" + Math.round(aiRiskProbability * 100) + "% risk probability)");
-            } else if ("LEGITIMATE".equalsIgnoreCase(aiClassification) && aiRiskProbability < 0.50) {
+            } else if ("LEGITIMATE".equalsIgnoreCase(aiClassification) && aiRiskProbability < 0.40) {
                 positiveSignals.add("AI model classified offer text as legitimate (" + Math.round((1.0 - aiRiskProbability) * 100) + "% confidence)");
+            } else {
+                log.info("AI model risk probability {} is in uncertain range [0.40, 0.60); treated as neutral additional signal.", aiRiskProbability);
             }
         } else {
             // Fallback: Use pure rule-based score when AI service is unavailable
@@ -348,30 +355,7 @@ public class AnalysisService {
     }
 
     private boolean checkPaymentAndFees(String text, List<String> redFlags) {
-        boolean match = text.contains("registration fee") ||
-                text.contains("processing fee") ||
-                text.contains("application fee") ||
-                text.contains("security deposit") ||
-                text.contains("refundable deposit") ||
-                text.contains("training fee") ||
-                text.contains("laptop fee") ||
-                text.contains("courier fee") ||
-                text.contains("material fee") ||
-                text.contains("kit fee") ||
-                text.contains("advance payment") ||
-                text.contains("pay advance") ||
-                text.contains("initial payment") ||
-                text.contains("pay rs") ||
-                text.contains("pay inr") ||
-                text.contains("transfer amount") ||
-                text.contains("deposit amount") ||
-                text.contains("upi id") ||
-                text.contains("gpay") ||
-                text.contains("phonepe") ||
-                text.contains("wire transfer") ||
-                text.contains("crypto") ||
-                text.contains("usdt");
-
+        boolean match = ProtectiveContextDetector.containsUnnegatedPaymentFeeDemand(text);
         if (match) {
             redFlags.add("Advance payment, registration fee, or security deposit demanded");
         }
@@ -379,15 +363,7 @@ public class AnalysisService {
     }
 
     private boolean checkCredentialPhishing(String text, List<String> redFlags) {
-        boolean match = (text.contains("otp") && (text.contains("share") || text.contains("send") || text.contains("verify"))) ||
-                text.contains("one-time password") ||
-                text.contains("net banking password") ||
-                text.contains("bank account password") ||
-                text.contains("atm pin") ||
-                text.contains("cvv") ||
-                text.contains("debit card pin") ||
-                text.contains("share your password");
-
+        boolean match = ProtectiveContextDetector.containsUnnegatedCredentialPhishing(text);
         if (match) {
             redFlags.add("Requests sensitive financial credentials, OTP, or passwords");
         }

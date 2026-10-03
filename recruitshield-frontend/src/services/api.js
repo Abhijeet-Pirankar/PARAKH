@@ -83,18 +83,15 @@ export function analyzeOfferLocally({ text = '', url = '', email = '', source = 
   const positiveSignals = [];
 
   // Rule 1: Payment & Upfront Fees (Weight: +40)
-  const hasFee =
-    normalizedText.includes('registration fee') ||
-    normalizedText.includes('processing fee') ||
-    normalizedText.includes('pay rs') ||
-    normalizedText.includes('deposit') ||
-    normalizedText.includes('security deposit') ||
-    normalizedText.includes('advance check') ||
-    normalizedText.includes('laptop deposit') ||
-    normalizedText.includes('courier fee') ||
-    normalizedText.includes('zelle') ||
-    normalizedText.includes('upi') ||
-    normalizedText.includes('wire transfer');
+  const feeTerms = [
+    'registration fee', 'processing fee', 'pay rs', 'security deposit',
+    'advance check', 'laptop deposit', 'courier fee', 'zelle', 'upi', 'wire transfer'
+  ];
+  const hasRawFeeMatch = feeTerms.some(term => normalizedText.includes(term));
+  const isNegatedFee =
+    /\b(no|not|never|without|zero|neither)\b[\w\s]{0,35}\b(registration fee|processing fee|fee|fees|payment|deposit|security deposit)\b/i.test(normalizedText) ||
+    /\b(registration fee|fee|deposit|payment)\b[\w\s]{0,30}\b(not required|never required|is free|waived)\b/i.test(normalizedText);
+  const hasFee = hasRawFeeMatch && !isNegatedFee;
 
   if (hasFee) {
     score += 40;

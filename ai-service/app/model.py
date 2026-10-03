@@ -41,7 +41,16 @@ class RiskModel:
         # Round to 4 decimal places
         suspicious_prob = round(suspicious_prob, 4)
 
-        classification = "SUSPICIOUS" if suspicious_prob >= 0.50 else "LEGITIMATE"
+        # Transparent Three-Tier Threshold Policy:
+        # suspicious_prob >= 0.60 -> SUSPICIOUS
+        # suspicious_prob < 0.40  -> LEGITIMATE
+        # 0.40 <= suspicious_prob < 0.60 -> UNCERTAIN (neutral signal)
+        if suspicious_prob >= 0.60:
+            classification = "SUSPICIOUS"
+        elif suspicious_prob < 0.40:
+            classification = "LEGITIMATE"
+        else:
+            classification = "UNCERTAIN"
 
         return {
             "riskProbability": suspicious_prob,

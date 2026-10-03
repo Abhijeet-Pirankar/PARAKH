@@ -283,4 +283,104 @@ class AnalysisServiceTest {
         assertEquals("HIGHLY_SUSPICIOUS", response.getStatus());
         assertEquals("HIGH", response.getRiskLevel());
     }
+
+    @Test
+    @DisplayName("A. Legitimate: \"No registration fee or payment required.\" must NOT trigger payment red flag")
+    void testLegitimateNoRegistrationFee() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Congratulations! Shortlisted for Software Developer Internship at TechNova Solutions. "
+                        + "Your interview will be conducted online through Google Meet. There is no registration fee or payment required. "
+                        + "Visit our official website https://www.technovasolutions.com to learn more.")
+                .companyWebsite("https://www.technovasolutions.com")
+                .recruiterEmail("hr@technovasolutions.com")
+                .receivedVia("Email")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertFalse(response.getRedFlags().stream()
+                        .anyMatch(f -> f.toLowerCase().contains("advance payment") || f.toLowerCase().contains("registration fee")),
+                "Must NOT contain advance payment or registration fee red flag");
+        assertTrue(response.getPositiveSignals().stream()
+                        .anyMatch(s -> s.contains("No upfront payment, registration fee, or equipment deposit demanded")),
+                "Must include positive signal for zero fee demand");
+        assertEquals("LIKELY_GENUINE", response.getStatus());
+        assertEquals("LOW", response.getRiskLevel());
+    }
+
+    @Test
+    @DisplayName("B. Legitimate security warning: \"Never share your OTP with anyone.\" must NOT trigger phishing red flag")
+    void testLegitimateOtpWarning() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Welcome to the team. Security notice: Never share your OTP with anyone, including recruitment coordinators.")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertFalse(response.getRedFlags().stream()
+                        .anyMatch(f -> f.toLowerCase().contains("credentials") || f.toLowerCase().contains("otp")),
+                "Protective OTP warning must NOT trigger credential phishing red flag");
+    }
+
+    @Test
+    @DisplayName("C. Legitimate security warning: \"We will never ask for your password.\" must NOT trigger phishing red flag")
+    void testLegitimatePasswordWarning() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Thank you for your application. Note that we will never ask for your password or banking credentials.")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertFalse(response.getRedFlags().stream()
+                        .anyMatch(f -> f.toLowerCase().contains("credentials") || f.toLowerCase().contains("password") || f.toLowerCase().contains("otp")),
+                "Protective password notice must NOT trigger credential phishing red flag");
+    }
+
+    @Test
+    @DisplayName("D. Scam: \"Pay Rs. 5000 registration fee to confirm your internship.\" MUST detect advance fee")
+    void testScamRegistrationFeeDemand() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Congratulations! Pay Rs. 5000 registration fee to confirm your internship.")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertTrue(response.getRedFlags().stream()
+                        .anyMatch(f -> f.toLowerCase().contains("advance payment") || f.toLowerCase().contains("registration fee")),
+                "Affirmative registration fee demand MUST be detected");
+    }
+
+    @Test
+    @DisplayName("E. Scam: \"Send your OTP to complete verification.\" MUST detect credential phishing")
+    void testScamOtpDemand() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("To finalize your onboarding, please send your OTP to complete verification.")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertTrue(response.getRedFlags().stream()
+                        .anyMatch(f -> f.toLowerCase().contains("financial credentials") || f.toLowerCase().contains("otp")),
+                "Affirmative OTP demand MUST be detected");
+    }
+
+    @Test
+    @DisplayName("F. Scam: \"Pay a security deposit before joining.\" MUST detect security deposit demand")
+    void testScamSecurityDepositDemand() {
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("You are selected! Please pay a security deposit before joining our office.")
+                .build();
+
+        VerifyResponse response = analysisService.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertTrue(response.getRedFlags().stream()
+                        .anyMatch(f -> f.toLowerCase().contains("advance payment") || f.toLowerCase().contains("security deposit")),
+                "Affirmative security deposit demand MUST be detected");
+    }
 }

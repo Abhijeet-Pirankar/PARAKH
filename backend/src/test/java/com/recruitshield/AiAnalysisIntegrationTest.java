@@ -355,4 +355,48 @@ class AiAnalysisIntegrationTest {
         assertFalse(response.isAiAnalysisAvailable());
         assertEquals(response.getRuleBasedScore(), response.getRiskScore());
     }
+
+    @Test
+    @DisplayName("14. AI Uncertain range: Probability ~0.50 classified as UNCERTAIN and does not generate a critical red flag")
+    void testAiUncertainProbabilityThreshold() {
+        when(mockAiClient.predict(anyString())).thenReturn(Optional.of(
+                AiPredictionResponse.builder()
+                        .riskProbability(0.5033)
+                        .classification("UNCERTAIN")
+                        .model("tfidf-logistic-regression")
+                        .build()
+        ));
+
+        AnalysisService service = new AnalysisService(null, null, urlService, recruiterService, mockAiClient);
+
+        VerifyRequest request = VerifyRequest.builder()
+                .offerText("Congratulations! Shortlisted for Software Developer Internship at TechNova Solutions. "
+                        + "Your interview will be conducted online through Google Meet. There is no registration fee or payment required. "
+                        + "Visit our official website https://www.technovasolutions.com to learn more.")
+                .companyWebsite("https://www.technovasolutions.com")
+                .recruiterEmail("hr@technovasolutions.com")
+                .receivedVia("Email")
+                .build();
+
+        VerifyResponse response = service.analyzeOffer(request);
+
+        assertNotNull(response);
+        assertTrue(response.isAiAnalysisAvailable());
+        assertEquals(0.5033, response.getAiRiskProbability());
+        assertEquals("UNCERTAIN", response.getAiClassification());
+        // ruleBasedScore is 0 for this clean offer
+        assertEquals(0, response.getRuleBasedScore());
+        // final score: round(0.70 * 0 + 0.30 * 50) = 15
+        assertEquals(15, response.getRiskScore());
+        assertEquals("LIKELY_GENUINE", response.getStatus());
+        assertEquals("LOW", response.getRiskLevel());
+
+        // CRITICAL CHECK: AI at ~0.50 MUST NOT generate a red flag!
+        assertFalse(response.getRedFlags().stream().anyMatch(f -> f.contains("AI model flagged")),
+                "AI output in uncertain range must not generate an AI red flag");
+        assertFalse(response.getRedFlags().stream().anyMatch(f -> f.toLowerCase().contains("advance payment")),
+                "Negated payment phrase must not generate payment red flag");
+        assertTrue(response.getPositiveSignals().stream().anyMatch(s -> s.contains("No upfront payment")),
+                "Clean offer must retain positive signal for zero fee demands");
+    }
 }

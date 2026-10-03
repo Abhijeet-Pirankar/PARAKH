@@ -48,25 +48,42 @@ def test_model_prediction_structure_and_bounds(risk_model):
     assert "model" in result
     assert isinstance(result["riskProbability"], float)
     assert 0.0 <= result["riskProbability"] <= 1.0
-    assert result["classification"] in ("LEGITIMATE", "SUSPICIOUS")
+    assert result["classification"] in ("LEGITIMATE", "SUSPICIOUS", "UNCERTAIN")
     assert result["model"] == "tfidf-logistic-regression"
 
 
 def test_model_classification_validity_and_threshold(risk_model):
     """4. Classification validity: classification must be strictly in allowed values."""
     legit_result = risk_model.predict("We are pleased to offer you the position of Systems Analyst at Infosys.")
-    assert legit_result["classification"] in ("LEGITIMATE", "SUSPICIOUS")
-    if legit_result["riskProbability"] < 0.50:
+    assert legit_result["classification"] in ("LEGITIMATE", "SUSPICIOUS", "UNCERTAIN")
+    if legit_result["riskProbability"] < 0.40:
         assert legit_result["classification"] == "LEGITIMATE"
-    else:
+    elif legit_result["riskProbability"] >= 0.60:
         assert legit_result["classification"] == "SUSPICIOUS"
+    else:
+        assert legit_result["classification"] == "UNCERTAIN"
 
     scam_result = risk_model.predict("Direct selection without interview! Pay Rs 3000 registration fee via GPay now!")
-    assert scam_result["classification"] in ("LEGITIMATE", "SUSPICIOUS")
-    if scam_result["riskProbability"] >= 0.50:
+    assert scam_result["classification"] in ("LEGITIMATE", "SUSPICIOUS", "UNCERTAIN")
+    if scam_result["riskProbability"] >= 0.60:
         assert scam_result["classification"] == "SUSPICIOUS"
-    else:
+    elif scam_result["riskProbability"] < 0.40:
         assert scam_result["classification"] == "LEGITIMATE"
+    else:
+        assert scam_result["classification"] == "UNCERTAIN"
+
+
+def test_model_uncertain_classification_around_half(risk_model):
+    """Verify that an offer around 0.50 probability is classified as UNCERTAIN."""
+    text_around_half = (
+        "Congratulations! You have been shortlisted for a Software Developer Internship at TechNova Solutions.\n"
+        "Your interview will be conducted online through Google Meet. There is no registration fee or payment required.\n"
+        "Please visit our official website https://www.technovasolutions.com to learn more about the company and internship.\n"
+        "Regards, HR Team TechNova Solutions hr@technovasolutions.com"
+    )
+    result = risk_model.predict(text_around_half)
+    assert 0.40 <= result["riskProbability"] < 0.60, f"Expected probability around 0.50, got {result['riskProbability']}"
+    assert result["classification"] == "UNCERTAIN"
 
 
 def test_model_robustness_special_inputs(risk_model):
@@ -84,7 +101,7 @@ def test_model_robustness_special_inputs(risk_model):
         result = risk_model.predict(text)
         assert isinstance(result["riskProbability"], float)
         assert 0.0 <= result["riskProbability"] <= 1.0
-        assert result["classification"] in ("LEGITIMATE", "SUSPICIOUS")
+        assert result["classification"] in ("LEGITIMATE", "SUSPICIOUS", "UNCERTAIN")
         assert result["model"] == "tfidf-logistic-regression"
 
 

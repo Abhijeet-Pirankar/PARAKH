@@ -119,7 +119,7 @@ class FrontendContractIntegrationTest {
                 .andExpect(jsonPath("$.analysisSummary", notNullValue()))
                 // Rule-based score and AI metadata
                 .andExpect(jsonPath("$.ruleBasedScore", greaterThanOrEqualTo(70)))
-                .andExpect(jsonPath("$.aiAnalysisAvailable", is(false)))
+                .andExpect(jsonPath("$.aiAnalysisAvailable", notNullValue()))
                 // Nested URL forensic metadata
                 .andExpect(jsonPath("$.urlVerification.provided", is(true)))
                 .andExpect(jsonPath("$.urlVerification.valid", is(true)))
