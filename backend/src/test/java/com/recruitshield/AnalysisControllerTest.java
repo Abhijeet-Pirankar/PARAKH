@@ -209,4 +209,53 @@ class AnalysisControllerTest {
                 .andExpect(jsonPath("$.message", not(containsString("Simulated unexpected internal database failure"))))
                 .andExpect(jsonPath("$.details[0]", not(containsString("com.recruitshield"))));
     }
+
+    @Test
+    @DisplayName("6. Oversized companyName: Payload exceeding 255 characters returns HTTP 400 BAD_REQUEST")
+    void testOversizedCompanyName() throws Exception {
+        String oversizedName = "C".repeat(256);
+        String jsonPayload = """
+            {
+              "offerText": "Valid offer text.",
+              "companyName": "%s"
+            }
+            """.formatted(oversizedName);
+
+        mockMvc.perform(post("/api/analyze-offer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("BAD_REQUEST")))
+                .andExpect(jsonPath("$.message", containsString("Company name cannot exceed 255 characters")));
+    }
+
+    @Test
+    @DisplayName("7. Oversized companyWebsite: Payload exceeding 2048 characters returns HTTP 400 BAD_REQUEST")
+    void testOversizedCompanyWebsite() throws Exception {
+        String oversizedUrl = "https://example.com/" + "a".repeat(2040);
+        String jsonPayload = """
+            {
+              "offerText": "Valid offer text.",
+              "companyWebsite": "%s"
+            }
+            """.formatted(oversizedUrl);
+
+        mockMvc.perform(post("/api/analyze-offer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(jsonPayload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("BAD_REQUEST")))
+                .andExpect(jsonPath("$.message", containsString("Company website URL cannot exceed 2,048 characters")));
+    }
+
+    @Test
+    @DisplayName("8. Unsupported media type: Request with text/plain returns HTTP 415 UNSUPPORTED_MEDIA_TYPE")
+    void testUnsupportedMediaType() throws Exception {
+        mockMvc.perform(post("/api/analyze-offer")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("Raw text payload instead of json"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.error", is("UNSUPPORTED_MEDIA_TYPE")))
+                .andExpect(jsonPath("$.message", containsString("Unsupported Content-Type")));
+    }
 }

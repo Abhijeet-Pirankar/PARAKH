@@ -559,4 +559,76 @@ class AuthControllerIntegrationTest {
                 .andExpect(jsonPath("$.passwordHash").doesNotExist())
                 .andExpect(jsonPath("$.password").doesNotExist());
     }
+
+    @Test
+    @DisplayName("Security: Registration rejects password exceeding 128 chars with 400 Bad Request (BCrypt CPU DoS protection)")
+    void testRegisterPasswordExceeds128CharsRejected() throws Exception {
+        String longPassword = "P".repeat(129);
+        RegisterRequest request = RegisterRequest.builder()
+                .name("Oversized Pass User")
+                .email("longpass_" + System.currentTimeMillis() + "@example.com")
+                .password(longPassword)
+                .build();
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("BAD_REQUEST")))
+                .andExpect(jsonPath("$.message", containsString("Password cannot exceed 128 characters")));
+    }
+
+    @Test
+    @DisplayName("Security: Login rejects password exceeding 128 chars with 400 Bad Request (BCrypt CPU DoS protection)")
+    void testLoginPasswordExceeds128CharsRejected() throws Exception {
+        String longPassword = "P".repeat(129);
+        LoginRequest request = LoginRequest.builder()
+                .email("valid@example.com")
+                .password(longPassword)
+                .build();
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("BAD_REQUEST")))
+                .andExpect(jsonPath("$.message", containsString("Password cannot exceed 128 characters")));
+    }
+
+    @Test
+    @DisplayName("Security: Registration rejects name exceeding 100 chars with 400 Bad Request")
+    void testRegisterNameExceeds100CharsRejected() throws Exception {
+        String longName = "N".repeat(101);
+        RegisterRequest request = RegisterRequest.builder()
+                .name(longName)
+                .email("longname_" + System.currentTimeMillis() + "@example.com")
+                .password("ValidPass123")
+                .build();
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("BAD_REQUEST")))
+                .andExpect(jsonPath("$.message", containsString("Name cannot exceed 100 characters")));
+    }
+
+    @Test
+    @DisplayName("Security: Registration rejects email exceeding 255 chars with 400 Bad Request")
+    void testRegisterEmailExceeds255CharsRejected() throws Exception {
+        String longLocal = "e".repeat(250);
+        String longEmail = longLocal + "@example.com";
+        RegisterRequest request = RegisterRequest.builder()
+                .name("Valid Name")
+                .email(longEmail)
+                .password("ValidPass123")
+                .build();
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("BAD_REQUEST")))
+                .andExpect(jsonPath("$.message", containsString("Email cannot exceed 255 characters")));
+    }
 }

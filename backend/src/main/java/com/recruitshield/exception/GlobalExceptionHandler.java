@@ -94,6 +94,28 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(errorResponse);
     }
 
+    @ExceptionHandler(org.springframework.web.HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMediaTypeNotSupportedException(org.springframework.web.HttpMediaTypeNotSupportedException ex) {
+        log.warn("Unsupported media type: {}", ex.getMessage());
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .error("UNSUPPORTED_MEDIA_TYPE")
+                .message("Unsupported Content-Type. Please use application/json.")
+                .details(List.of("Content-Type '" + ex.getContentType() + "' is not supported. Use application/json."))
+                .build();
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(errorResponse);
+    }
+
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleMethodArgumentTypeMismatchException(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex) {
+        log.warn("Method argument type mismatch: {}", ex.getMessage());
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .error("BAD_REQUEST")
+                .message("Invalid parameter type for '" + ex.getName() + "'.")
+                .details(List.of("Parameter '" + ex.getName() + "' has invalid format."))
+                .build();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception ex) {
         log.error("Unhandled error: ", ex);

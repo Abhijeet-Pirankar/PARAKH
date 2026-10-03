@@ -346,8 +346,20 @@ public class AnalysisService {
         if (text.length() > 50000) {
             throw new IllegalArgumentException("Offer text exceeds maximum supported size (50,000 characters).");
         }
+        if (request.getCompanyName() != null && request.getCompanyName().length() > 255) {
+            throw new IllegalArgumentException("Company name cannot exceed 255 characters.");
+        }
+        if (request.getCompanyWebsite() != null && request.getCompanyWebsite().length() > 2048) {
+            throw new IllegalArgumentException("Company website URL cannot exceed 2,048 characters.");
+        }
+        if (request.getReceivedVia() != null && request.getReceivedVia().length() > 100) {
+            throw new IllegalArgumentException("Received via medium cannot exceed 100 characters.");
+        }
         if (request.getRecruiterEmail() != null && !request.getRecruiterEmail().trim().isEmpty()) {
             String email = request.getRecruiterEmail().trim();
+            if (email.length() > 255) {
+                throw new IllegalArgumentException("Recruiter email cannot exceed 255 characters.");
+            }
             if (!EMAIL_PATTERN.matcher(email).matches()) {
                 throw new IllegalArgumentException("Invalid recruiter email format: " + email);
             }

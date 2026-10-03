@@ -90,8 +90,14 @@ public class AuthService {
         if (request.getName() == null || request.getName().trim().isEmpty()) {
             throw new IllegalArgumentException("Name cannot be empty or blank.");
         }
+        if (request.getName().trim().length() > 100) {
+            throw new IllegalArgumentException("Name cannot exceed 100 characters.");
+        }
         if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
             throw new IllegalArgumentException("Email cannot be empty or blank.");
+        }
+        if (request.getEmail().trim().length() > 255) {
+            throw new IllegalArgumentException("Email cannot exceed 255 characters.");
         }
         if (!EMAIL_PATTERN.matcher(request.getEmail().trim()).matches()) {
             throw new IllegalArgumentException("Invalid email format.");
@@ -102,6 +108,9 @@ public class AuthService {
         if (request.getPassword().trim().length() < 6) {
             throw new IllegalArgumentException("Password must be at least 6 characters long.");
         }
+        if (request.getPassword().trim().length() > 128) {
+            throw new IllegalArgumentException("Password cannot exceed 128 characters.");
+        }
     }
 
     private void validateLoginRequest(LoginRequest request) {
@@ -111,8 +120,14 @@ public class AuthService {
         if (request.getEmail() == null || request.getEmail().trim().isEmpty()) {
             throw new IllegalArgumentException("Email cannot be empty or blank.");
         }
+        if (request.getEmail().trim().length() > 255) {
+            throw new IllegalArgumentException("Email cannot exceed 255 characters.");
+        }
         if (request.getPassword() == null || request.getPassword().trim().isEmpty()) {
             throw new IllegalArgumentException("Password cannot be empty or blank.");
+        }
+        if (request.getPassword().trim().length() > 128) {
+            throw new IllegalArgumentException("Password cannot exceed 128 characters.");
         }
     }
 }

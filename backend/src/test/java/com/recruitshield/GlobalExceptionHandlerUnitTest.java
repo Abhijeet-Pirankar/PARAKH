@@ -143,4 +143,34 @@ class GlobalExceptionHandlerUnitTest {
         assertFalse(response.getBody().getMessage().contains("Sensitive database"));
         assertFalse(response.getBody().getDetails().get(0).contains("Sensitive database"));
     }
+
+    @Test
+    @DisplayName("9. HttpMediaTypeNotSupportedException: Returns HTTP 415 with UNSUPPORTED_MEDIA_TYPE")
+    void testHandleHttpMediaTypeNotSupportedException() {
+        org.springframework.web.HttpMediaTypeNotSupportedException ex =
+                new org.springframework.web.HttpMediaTypeNotSupportedException(
+                        org.springframework.http.MediaType.TEXT_PLAIN,
+                        List.of(org.springframework.http.MediaType.APPLICATION_JSON));
+        ResponseEntity<ErrorResponse> response = handler.handleHttpMediaTypeNotSupportedException(ex);
+
+        assertEquals(HttpStatus.UNSUPPORTED_MEDIA_TYPE, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("UNSUPPORTED_MEDIA_TYPE", response.getBody().getError());
+        assertEquals("Unsupported Content-Type. Please use application/json.", response.getBody().getMessage());
+        assertTrue(response.getBody().getDetails().get(0).contains("text/plain"));
+    }
+
+    @Test
+    @DisplayName("10. MethodArgumentTypeMismatchException: Returns HTTP 400 with BAD_REQUEST")
+    void testHandleMethodArgumentTypeMismatchException() {
+        org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex =
+                new org.springframework.web.method.annotation.MethodArgumentTypeMismatchException(
+                        "invalid-number", Long.class, "id", null, null);
+        ResponseEntity<ErrorResponse> response = handler.handleMethodArgumentTypeMismatchException(ex);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("BAD_REQUEST", response.getBody().getError());
+        assertEquals("Invalid parameter type for 'id'.", response.getBody().getMessage());
+    }
 }
