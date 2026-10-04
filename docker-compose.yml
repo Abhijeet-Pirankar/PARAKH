@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: mysql:8.0
@@ -11,10 +9,59 @@ services:
       MYSQL_USER: recruitshield_user
       MYSQL_PASSWORD: recruitshield_password
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - db_data:/var/lib/mysql
       - ./database/schema:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - recruitshield-net
+
+  ai-service:
+    image: parakh-ai-service:latest
+    container_name: parakh-ai-service
+    restart: always
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - recruitshield-net
+
+  backend:
+    image: parakh-backend:latest
+    container_name: recruitshield-backend
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/recruitshield?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: recruitshield_user
+      SPRING_DATASOURCE_PASSWORD: recruitshield_password
+      AI_SERVICE_URL: http://ai-service:8000
+      AI_SERVICE_ENABLED: "true"
+      AI_SERVICE_TIMEOUT_MS: "3000"
+      JWT_SECRET: ${JWT_SECRET:-recruitshield-development-jwt-secret-key-min-256-bits-long-32-bytes}
+    depends_on:
+      db:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+    networks:
+      - recruitshield-net
 
 volumes:
   db_data:
+
+networks:
+  recruitshield-net:
+    driver: bridge
