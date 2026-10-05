@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { analyzeOffer } from '../services/api';
+import { analyzeOffer, API_BASE_URL } from '../services/api';
 import LoadingAnalysis from '../components/LoadingAnalysis';
 import Button from '../components/Button';
 
@@ -121,6 +121,7 @@ Please review your formal offer contract on our official corporate workday porta
     try {
       const payload = {
         offerText: offerText.trim(),
+        text: offerText.trim(),
         companyName: '',
         companyWebsite: offerUrl.trim(),
         recruiterEmail: offerEmail.trim(),
@@ -150,9 +151,17 @@ Please review your formal offer contract on our official corporate workday porta
     } catch (err) {
       setUiState('error');
       if (err.code === 'BACKEND_UNAVAILABLE') {
-        setErrorMessage('Unable to connect to PARAKH backend service. Please ensure the Spring Boot server is running on http://localhost:8080.');
-      } else if (err.status === 400) {
+        setErrorMessage(`Unable to connect to PARAKH backend service. Please ensure the server is running on ${API_BASE_URL}.`);
+      } else if (err.status === 400 || err.code === 'VALIDATION_ERROR') {
         setErrorMessage(err.message || 'Validation error: please check your offer inputs.');
+      } else if (err.status === 401) {
+        setErrorMessage('Authentication error: You are not authorized to perform this analysis.');
+      } else if (err.status === 403) {
+        setErrorMessage('Access forbidden: You do not have permission to perform this analysis.');
+      } else if (err.status === 404 || err.code === 'NOT_FOUND') {
+        setErrorMessage(err.message || 'The requested analysis service endpoint was not found on the server (HTTP 404).');
+      } else if (err.status >= 500 || err.code === 'SERVER_ERROR') {
+        setErrorMessage('The PARAKH analysis service encountered an internal error. Please try again later.');
       } else {
         setErrorMessage(err.message || 'Unable to analyze this offer. Please check your connection and try again.');
       }

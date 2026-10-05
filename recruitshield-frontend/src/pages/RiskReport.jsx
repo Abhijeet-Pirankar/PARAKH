@@ -73,7 +73,7 @@ export default function RiskReport() {
   // Resolve active data (fully data-driven from backend response or fallback)
   const reportData = stateData || defaultDemo;
 
-  const score = Number(reportData.score ?? 0);
+  const score = Number(reportData.score ?? reportData.riskScore ?? 0);
   const status = reportData.status || (score >= 70 ? 'HIGHLY_SUSPICIOUS' : score >= 40 ? 'NEEDS_VERIFICATION' : 'LIKELY_GENUINE');
 
   // Normalize red flags (handles objects, strings, or legacy 'reasons')
@@ -127,6 +127,14 @@ export default function RiskReport() {
         </div>
       )}
 
+      {/* Offline Fallback Notice Banner */}
+      {(reportData.isOffline || reportData.source === 'client-heuristic') && !isDemo && (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-xs font-mono text-amber-300">
+          <span className="material-symbols-outlined text-[18px]">cloud_off</span>
+          <span>Notice: This report was generated using client-side heuristic threat detection because the backend was unreachable. Advanced AI classification and verified database cross-checks were not performed.</span>
+        </div>
+      )}
+
       {/* ================================================== */}
       {/* 1. INVESTIGATION RESULT Header */}
       {/* ================================================== */}
@@ -143,7 +151,13 @@ export default function RiskReport() {
           <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-on-surface-variant">
             <span>Evaluated: {targetTimestamp}</span>
             <span>•</span>
-            <span className="text-primary">AI-Assisted Analysis</span>
+            <span className={reportData.isOffline || reportData.source === 'client-heuristic' ? 'text-amber-400 font-semibold' : 'text-primary'}>
+              {reportData.isOffline || reportData.source === 'client-heuristic'
+                ? 'Offline Heuristic Analysis'
+                : reportData.aiAnalysisAvailable
+                ? `AI-Assisted Analysis (${reportData.aiClassification || 'Evaluated'})`
+                : 'Rule-Based Verification Engine'}
+            </span>
           </div>
         </div>
 
@@ -187,11 +201,11 @@ export default function RiskReport() {
         <div className="mt-3 flex flex-col items-center gap-2">
           <RiskBadge status={status} score={score} size="lg" />
           <p className="font-body-sm text-xs sm:text-sm text-on-surface-variant max-w-md mt-1 leading-relaxed">
-            {score >= 70
+            {reportData.analysisSummary || (score >= 70
               ? 'High risk of fraudulent activity detected. Exercise extreme caution and do not send money.'
               : score >= 40
               ? 'Moderate risk signals detected. Additional verification with the employer is strongly recommended.'
-              : 'Standard trust signals observed. Always confirm sensitive details through official employer channels.'}
+              : 'Standard trust signals observed. Always confirm sensitive details through official employer channels.')}
           </p>
         </div>
       </div>
@@ -307,7 +321,7 @@ export default function RiskReport() {
 
           {activeTab === 'signals' && (
             <div className="bg-surface-container-lowest rounded-xl p-4 font-mono text-xs space-y-2 border border-surface-variant/20 text-on-surface">
-              <div className="text-on-surface-variant">// Heuristic Evaluation Summary</div>
+              <div className="text-on-surface-variant">// Verification Findings Summary</div>
               <div className="flex justify-between">
                 <span className="text-on-surface-variant">Advance-Fee Indicator:</span>
                 <span className={score >= 40 ? 'text-error' : 'text-tertiary'}>
@@ -316,17 +330,37 @@ export default function RiskReport() {
               </div>
               <div className="flex justify-between">
                 <span className="text-on-surface-variant">Recruiter Webmail Check:</span>
-                <span className={stateMeta?.offerEmail?.includes('@gmail') ? 'text-error' : 'text-on-surface'}>
-                  {stateMeta?.offerEmail || 'Domain Verified'}
+                <span className={reportData.recruiterVerification?.publicFreemail || stateMeta?.offerEmail?.includes('@gmail') ? 'text-error' : 'text-on-surface'}>
+                  {reportData.recruiterVerification?.publicFreemail
+                    ? 'PUBLIC FREEMAIL DETECTED'
+                    : reportData.recruiterVerification?.emailProvided
+                    ? 'CORPORATE DOMAIN'
+                    : stateMeta?.offerEmail || 'Not specified'}
                 </span>
               </div>
+              {reportData.urlVerification?.provided && (
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">URL Transport Security:</span>
+                  <span className={reportData.urlVerification.https ? 'text-tertiary' : 'text-error'}>
+                    {reportData.urlVerification.https ? 'HTTPS SECURE' : 'UNENCRYPTED (HTTP)'}
+                  </span>
+                </div>
+              )}
+              {reportData.aiAnalysisAvailable && (
+                <div className="flex justify-between">
+                  <span className="text-on-surface-variant">AI ML Risk Probability:</span>
+                  <span className={reportData.aiRiskProbability > 0.5 ? 'text-error' : 'text-tertiary'}>
+                    {reportData.aiRiskProbability !== null ? `${Math.round(reportData.aiRiskProbability * 100)}% (${reportData.aiClassification || 'EVALUATED'})` : 'N/A'}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-on-surface-variant">Delivery Channel:</span>
-                <span className="text-on-surface">{stateMeta?.offerSource || 'direct-email'}</span>
+                <span className="text-on-surface">{stateMeta?.offerSource || reportData.recruiterVerification?.communicationChannel || 'direct-email'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-on-surface-variant">Risk Tier Index:</span>
-                <span className="text-primary">{score} / 100</span>
+                <span className="text-primary">{score} / 100 ({reportData.riskLevel || (score >= 70 ? 'HIGH' : score >= 40 ? 'MEDIUM' : 'LOW')})</span>
               </div>
             </div>
           )}
@@ -335,16 +369,29 @@ export default function RiskReport() {
             <div className="bg-surface-container-lowest rounded-xl p-4 font-mono text-xs space-y-2 border border-surface-variant/20 text-on-surface">
               <div className="text-on-surface-variant">// Communication Metadata Audit</div>
               <div>
-                <span className="text-primary">Sender Handle:</span> {stateMeta?.offerEmail || 'Not specified'}
+                <span className="text-primary">Sender Handle:</span> {reportData.recruiterVerification?.email || stateMeta?.offerEmail || 'Not specified'}
+              </div>
+              {reportData.recruiterVerification?.domainMatch !== undefined && reportData.recruiterVerification?.domainMatch !== null && (
+                <div>
+                  <span className="text-primary">Domain Alignment:</span>{' '}
+                  <span className={reportData.recruiterVerification.domainMatch ? 'text-tertiary' : 'text-error'}>
+                    {reportData.recruiterVerification.domainMatch ? 'MATCHES COMPANY DOMAIN' : 'MISMATCH DETECTED'}
+                  </span>
+                </div>
+              )}
+              <div>
+                <span className="text-primary">Company URL:</span> {reportData.urlVerification?.originalUrl || stateMeta?.offerUrl || 'Not specified'}
+              </div>
+              {reportData.urlVerification?.domain && (
+                <div>
+                  <span className="text-primary">Normalized Domain:</span> {reportData.urlVerification.domain}
+                </div>
+              )}
+              <div>
+                <span className="text-primary">Channel Type:</span> {stateMeta?.offerSource || reportData.recruiterVerification?.communicationChannel || 'Direct Communication'}
               </div>
               <div>
-                <span className="text-primary">Company URL:</span> {stateMeta?.offerUrl || 'Not specified'}
-              </div>
-              <div>
-                <span className="text-primary">Channel Type:</span> {stateMeta?.offerSource || 'Direct Communication'}
-              </div>
-              <div>
-                <span className="text-primary">Assessment Model:</span> Heuristic Rule Matrix v1.0
+                <span className="text-primary">Assessment Model:</span> {reportData.aiAnalysisAvailable ? 'Hybrid Heuristic + AI ML Model v1.0' : reportData.isOffline ? 'Offline Heuristic Matrix v1.0' : 'Spring Boot Heuristic Rule Matrix v1.0'}
               </div>
             </div>
           )}
