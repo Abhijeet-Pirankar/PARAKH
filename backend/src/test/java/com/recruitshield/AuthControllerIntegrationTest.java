@@ -7,6 +7,7 @@ import com.recruitshield.dto.RegisterRequest;
 import com.recruitshield.dto.VerifyRequest;
 import com.recruitshield.repository.UserRepository;
 import com.recruitshield.security.JwtService;
+import com.recruitshield.security.RateLimiter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,11 +45,17 @@ class AuthControllerIntegrationTest {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private RateLimiter rateLimiter;
+
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
                 .apply(springSecurity())
                 .build();
+        if (rateLimiter != null) {
+            rateLimiter.reset();
+        }
     }
 
     @Test

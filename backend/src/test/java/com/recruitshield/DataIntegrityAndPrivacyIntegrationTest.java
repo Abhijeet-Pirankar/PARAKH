@@ -14,6 +14,7 @@ import com.recruitshield.repository.UserRepository;
 import com.recruitshield.service.AnalysisService;
 import com.recruitshield.service.RecruiterVerificationService;
 import com.recruitshield.service.UrlVerificationService;
+import com.recruitshield.security.RateLimiter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -68,6 +69,9 @@ class DataIntegrityAndPrivacyIntegrationTest {
     @Autowired
     private AnalysisService analysisService;
 
+    @Autowired
+    private RateLimiter rateLimiter;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final List<Long> trackedOfferIds = new ArrayList<>();
     private final List<Long> trackedUserIds = new ArrayList<>();
@@ -77,6 +81,9 @@ class DataIntegrityAndPrivacyIntegrationTest {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
                 .apply(springSecurity())
                 .build();
+        if (rateLimiter != null) {
+            rateLimiter.reset();
+        }
     }
 
     @AfterEach

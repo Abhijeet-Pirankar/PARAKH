@@ -3,6 +3,7 @@ package com.recruitshield;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.recruitshield.dto.VerifyRequest;
 import com.recruitshield.security.JwtService;
+import com.recruitshield.security.RateLimiter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,9 @@ class SecurityCorsIntegrationTest {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private RateLimiter rateLimiter;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
@@ -38,6 +42,9 @@ class SecurityCorsIntegrationTest {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
                 .apply(springSecurity())
                 .build();
+        if (rateLimiter != null) {
+            rateLimiter.reset();
+        }
     }
 
     @Test
