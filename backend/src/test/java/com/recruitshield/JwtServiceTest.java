@@ -58,4 +58,60 @@ class JwtServiceTest {
         assertEquals("admin@example.com", jwtService.extractEmail(token));
         assertEquals("ADMIN", jwtService.extractRole(token));
     }
+
+    @Test
+    @DisplayName("Startup validation: Null JWT secret throws IllegalStateException")
+    void testNullSecretThrowsException() {
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> new JwtService(null, EXPIRATION_MS));
+        assertTrue(ex.getMessage().contains("JWT secret configuration is missing or blank"));
+    }
+
+    @Test
+    @DisplayName("Startup validation: Empty JWT secret throws IllegalStateException")
+    void testEmptySecretThrowsException() {
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> new JwtService("", EXPIRATION_MS));
+        assertTrue(ex.getMessage().contains("JWT secret configuration is missing or blank"));
+    }
+
+    @Test
+    @DisplayName("Startup validation: Blank/whitespace JWT secret throws IllegalStateException")
+    void testBlankSecretThrowsException() {
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> new JwtService("   \t\n  ", EXPIRATION_MS));
+        assertTrue(ex.getMessage().contains("JWT secret configuration is missing or blank"));
+    }
+
+    @Test
+    @DisplayName("Startup validation: Secret shorter than 256 bits (32 bytes) throws IllegalStateException")
+    void testWeakSecretThrowsException() {
+        String weakSecret = "short-secret-less-than-32-byte"; // 30 bytes
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> new JwtService(weakSecret, EXPIRATION_MS));
+        assertTrue(ex.getMessage().contains("JWT secret is too weak"));
+        assertTrue(ex.getMessage().contains("at least 256 bits (32 bytes)"));
+    }
+
+    @Test
+    @DisplayName("Security: Secret value is never leaked in exception messages")
+    void testSecretNeverLeakedInExceptionMessages() {
+        String sensitiveWeakSecret = "super-secret-key-too-short";
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> new JwtService(sensitiveWeakSecret, EXPIRATION_MS));
+        assertFalse(ex.getMessage().contains(sensitiveWeakSecret));
+    }
+
+    @Test
+    @DisplayName("Startup validation: Valid secret with exact 32 bytes (256 bits) boundary succeeds")
+    void testExact32ByteSecretSucceeds() {
+        String exact32ByteSecret = "12345678901234567890123456789012"; // 32 characters = 32 bytes UTF-8
+        JwtService exactService = new JwtService(exact32ByteSecret, EXPIRATION_MS);
+        assertNotNull(exactService);
+
+        String token = exactService.generateToken("exact@example.com", "USER", 99L, "Exact User");
+        assertNotNull(token);
+        assertTrue(exactService.validateToken(token));
+        assertEquals("exact@example.com", exactService.extractEmail(token));
+    }
 }

@@ -50,7 +50,7 @@ services:
       AI_SERVICE_URL: http://ai-service:8000
       AI_SERVICE_ENABLED: "true"
       AI_SERVICE_TIMEOUT_MS: "3000"
-      JWT_SECRET: ${JWT_SECRET:-recruitshield-development-jwt-secret-key-min-256-bits-long-32-bytes}
+      JWT_SECRET: ${JWT_SECRET}
     depends_on:
       db:
         condition: service_healthy

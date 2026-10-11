@@ -20,19 +20,37 @@ import java.util.function.Function;
 @Service
 public class JwtService {
 
-    private final String secretKeyString;
+    private static final int MIN_KEY_BYTES = 32; // 256 bits minimum required for HMAC-SHA256
+
+    private final SecretKey signingKey;
     private final long jwtExpirationMs;
 
     public JwtService(
-            @Value("${jwt.secret}") String secretKeyString,
+            @Value("${jwt.secret:}") String secretKeyString,
             @Value("${jwt.expiration-ms:86400000}") long jwtExpirationMs) {
-        this.secretKeyString = secretKeyString;
+        this.signingKey = validateAndCreateSigningKey(secretKeyString);
         this.jwtExpirationMs = jwtExpirationMs;
     }
 
-    private SecretKey getSigningKey() {
+    private static SecretKey validateAndCreateSigningKey(String secretKeyString) {
+        if (secretKeyString == null || secretKeyString.trim().isEmpty()) {
+            throw new IllegalStateException("JWT secret configuration is missing or blank. Please set the JWT_SECRET environment variable.");
+        }
         byte[] keyBytes = secretKeyString.getBytes(StandardCharsets.UTF_8);
-        return Keys.hmacShaKeyFor(keyBytes);
+        if (keyBytes.length < MIN_KEY_BYTES) {
+            throw new IllegalStateException(String.format(
+                    "JWT secret is too weak: key must be at least 256 bits (%d bytes) for HMAC-SHA256 signing algorithm. Current length is %d bits (%d bytes).",
+                    MIN_KEY_BYTES, keyBytes.length * 8, keyBytes.length));
+        }
+        try {
+            return Keys.hmacShaKeyFor(keyBytes);
+        } catch (Exception ex) {
+            throw new IllegalStateException("JWT secret is malformed or invalid: " + ex.getMessage(), ex);
+        }
+    }
+
+    private SecretKey getSigningKey() {
+        return this.signingKey;
     }
 
     public String generateToken(String email, String role, Long userId, String name) {
