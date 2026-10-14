@@ -14,3 +14,15 @@ PARAKH is a web-based platform that helps college students, freshers, and job se
 
 1. **Frontend**: cd `recruitshield-frontend` and run `npm run dev`
 2. **Backend**: cd `backend` and run `./mvnw spring-boot:run`
+
+## ⭐ Star History
+
+Track the growth and community interest in **PARAKH — AI-Powered Security Shield**, our cybersecurity project focused on AI-assisted threat detection and security awareness.
+
+<a href="https://www.star-history.com/#Abhijeet-Pirankar/PARAKH&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Abhijeet-Pirankar/PARAKH&type=date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Abhijeet-Pirankar/PARAKH&type=date" />
+   <img alt="Star History Chart for PARAKH" src="https://api.star-history.com/svg?repos=Abhijeet-Pirankar/PARAKH&type=date" />
+ </picture>
+</a>
