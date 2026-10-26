@@ -22,8 +22,7 @@ import org.springframework.web.context.WebApplicationContext;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -81,7 +80,7 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("Public Registration: POST /api/auth/register returns 409 Conflict on duplicate email")
+    @DisplayName("Public Registration: POST /api/auth/register returns 409 Conflict with generic REGISTRATION_FAILED without leaking email")
     void testRegisterEndpointDuplicateEmail() throws Exception {
         String uniqueEmail = "duplicate_" + System.currentTimeMillis() + "@example.com";
         RegisterRequest request = RegisterRequest.builder()
@@ -96,13 +95,66 @@ class AuthControllerIntegrationTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
-        // Duplicate registration
+        // Duplicate registration must return 409 Conflict with generic REGISTRATION_FAILED
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error", is("DUPLICATE_EMAIL")))
-                .andExpect(jsonPath("$.message", containsString("already registered")));
+                .andExpect(jsonPath("$.error", is("REGISTRATION_FAILED")))
+                .andExpect(jsonPath("$.message", is("Unable to complete registration with the provided details. Please verify your information or log in.")))
+                .andExpect(jsonPath("$.message", not(containsString(uniqueEmail))))
+                .andExpect(jsonPath("$.details[0]", not(containsString(uniqueEmail))));
+    }
+
+    @Test
+    @DisplayName("Account Enumeration Defense: Login response for unknown email matches wrong password response")
+    void testLoginResponseIndistinguishability() throws Exception {
+        String knownEmail = "known_" + System.currentTimeMillis() + "@example.com";
+        RegisterRequest registerReq = RegisterRequest.builder()
+                .name("Known User")
+                .email(knownEmail)
+                .password("RealPassword123")
+                .build();
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerReq)))
+                .andExpect(status().isCreated());
+
+        // Login with known email but wrong password
+        LoginRequest wrongPasswordReq = LoginRequest.builder()
+                .email(knownEmail)
+                .password("WrongPassword123")
+                .build();
+
+        MvcResult wrongPasswordResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(wrongPasswordReq)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error", is("INVALID_CREDENTIALS")))
+                .andExpect(jsonPath("$.message", is("Invalid email or password.")))
+                .andReturn();
+
+        // Login with completely unknown email
+        LoginRequest unknownEmailReq = LoginRequest.builder()
+                .email("unknown_" + System.currentTimeMillis() + "@example.com")
+                .password("WrongPassword123")
+                .build();
+
+        MvcResult unknownEmailResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(unknownEmailReq)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error", is("INVALID_CREDENTIALS")))
+                .andExpect(jsonPath("$.message", is("Invalid email or password.")))
+                .andReturn();
+
+        JsonNode wrongPwNode = objectMapper.readTree(wrongPasswordResult.getResponse().getContentAsString());
+        JsonNode unknownEmailNode = objectMapper.readTree(unknownEmailResult.getResponse().getContentAsString());
+
+        assertEquals(wrongPwNode.get("error").asText(), unknownEmailNode.get("error").asText());
+        assertEquals(wrongPwNode.get("message").asText(), unknownEmailNode.get("message").asText());
+        assertEquals(wrongPwNode.get("details").toString(), unknownEmailNode.get("details").toString());
     }
 
     @Test

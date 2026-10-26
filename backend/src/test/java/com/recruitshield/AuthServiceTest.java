@@ -33,7 +33,7 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         userRepository = mock(UserRepository.class);
-        passwordEncoder = new BCryptPasswordEncoder();
+        passwordEncoder = spy(new BCryptPasswordEncoder());
         jwtService = mock(JwtService.class);
         authService = new AuthService(userRepository, passwordEncoder, jwtService);
     }
@@ -75,7 +75,7 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Registration rejects duplicate email with DuplicateEmailException")
+    @DisplayName("Registration rejects duplicate email with DuplicateEmailException and executes dummy hash verification")
     void testRegisterDuplicateEmail() {
         RegisterRequest request = RegisterRequest.builder()
                 .name("Bob")
@@ -85,8 +85,25 @@ class AuthServiceTest {
 
         when(userRepository.existsByEmailIgnoreCase("bob@example.com")).thenReturn(true);
 
-        assertThrows(DuplicateEmailException.class, () -> authService.register(request));
+        DuplicateEmailException ex = assertThrows(DuplicateEmailException.class, () -> authService.register(request));
+        assertFalse(ex.getMessage().contains("bob@example.com"), "Exception message must never contain the email");
+        verify(passwordEncoder).matches(eq("password123"), anyString());
+        verify(passwordEncoder, never()).encode(anyString());
         verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Invalid registration input fails fast without invoking password hashing")
+    void testRegisterInvalidInputFailsFastWithoutHashing() {
+        RegisterRequest request = RegisterRequest.builder()
+                .name("Bob")
+                .email("not-an-email")
+                .password("password123")
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () -> authService.register(request));
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
+        verify(passwordEncoder, never()).encode(anyString());
     }
 
     @Test
@@ -169,7 +186,7 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Login with unknown email throws InvalidCredentialsException")
+    @DisplayName("Login with unknown email executes dummy BCrypt verification and throws InvalidCredentialsException")
     void testLoginUnknownEmail() {
         when(userRepository.findByEmailIgnoreCase("unknown@example.com")).thenReturn(Optional.empty());
 
@@ -179,5 +196,18 @@ class AuthServiceTest {
                 .build();
 
         assertThrows(InvalidCredentialsException.class, () -> authService.login(request));
+        verify(passwordEncoder).matches(eq("anyPassword"), anyString());
+    }
+
+    @Test
+    @DisplayName("Invalid login input fails fast without invoking password hashing")
+    void testLoginInvalidInputFailsFastWithoutHashing() {
+        LoginRequest request = LoginRequest.builder()
+                .email("unknown@example.com")
+                .password("")
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () -> authService.login(request));
+        verify(passwordEncoder, never()).matches(anyString(), anyString());
     }
 }

@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Stage 11 - Priority 10: GlobalExceptionHandler Unit Tests.
  *
  * Directly exercises each exception handler method in GlobalExceptionHandler in isolation:
- * 1. DuplicateEmailException -> 409 CONFLICT with DUPLICATE_EMAIL
+ * 1. DuplicateEmailException -> 409 CONFLICT with REGISTRATION_FAILED
  * 2. InvalidCredentialsException -> 401 UNAUTHORIZED with INVALID_CREDENTIALS
  * 3. BadCredentialsException -> 401 UNAUTHORIZED with INVALID_CREDENTIALS
  * 4. IllegalArgumentException -> 400 BAD_REQUEST with BAD_REQUEST
@@ -42,16 +42,18 @@ class GlobalExceptionHandlerUnitTest {
     }
 
     @Test
-    @DisplayName("1. DuplicateEmailException: Returns HTTP 409 Conflict with DUPLICATE_EMAIL error code")
+    @DisplayName("1. DuplicateEmailException: Returns HTTP 409 Conflict with generic REGISTRATION_FAILED error code")
     void testHandleDuplicateEmailException() {
-        DuplicateEmailException ex = new DuplicateEmailException("Email is already registered: test@domain.com");
+        DuplicateEmailException ex = new DuplicateEmailException();
         ResponseEntity<ErrorResponse> response = handler.handleDuplicateEmailException(ex);
 
         assertEquals(HttpStatus.CONFLICT, response.getStatusCode());
         assertNotNull(response.getBody());
-        assertEquals("DUPLICATE_EMAIL", response.getBody().getError());
-        assertEquals("Email is already registered: test@domain.com", response.getBody().getMessage());
+        assertEquals("REGISTRATION_FAILED", response.getBody().getError());
+        assertEquals(DuplicateEmailException.DEFAULT_MESSAGE, response.getBody().getMessage());
         assertEquals(1, response.getBody().getDetails().size());
+        assertEquals(DuplicateEmailException.DEFAULT_MESSAGE, response.getBody().getDetails().get(0));
+        assertFalse(response.getBody().getMessage().contains("@"), "Message must never contain email addresses");
     }
 
     @Test

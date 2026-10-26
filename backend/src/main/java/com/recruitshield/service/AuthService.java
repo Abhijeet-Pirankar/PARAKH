@@ -28,6 +28,12 @@ public class AuthService {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
 
+    /**
+     * Precomputed standard BCrypt hash (10 rounds) used for side-channel timing mitigation
+     * when authenticating non-existent users or rejecting duplicate registrations.
+     */
+    private static final String DUMMY_BCRYPT_HASH = "$2a$10$epuW00cs2SqgGb1GCF7Are7oRCQI0AmkKaFA6rhNaj4axW2jxfKyC";
+
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         validateRegisterRequest(request);
@@ -35,7 +41,9 @@ public class AuthService {
         String normalizedEmail = request.getEmail().trim().toLowerCase();
 
         if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
-            throw new DuplicateEmailException("Email is already registered: " + normalizedEmail);
+            // Mitigate timing disclosure for existing accounts by computing dummy hash check on the valid password
+            passwordEncoder.matches(request.getPassword().trim(), DUMMY_BCRYPT_HASH);
+            throw new DuplicateEmailException();
         }
 
         String encodedPassword = passwordEncoder.encode(request.getPassword().trim());
@@ -60,8 +68,13 @@ public class AuthService {
 
         String normalizedEmail = request.getEmail().trim().toLowerCase();
 
-        User user = userRepository.findByEmailIgnoreCase(normalizedEmail)
-                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password."));
+        User user = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
+
+        if (user == null) {
+            // Mitigate timing difference for non-existent users by evaluating password against precomputed dummy BCrypt hash
+            passwordEncoder.matches(request.getPassword().trim(), DUMMY_BCRYPT_HASH);
+            throw new InvalidCredentialsException("Invalid email or password.");
+        }
 
         if (!passwordEncoder.matches(request.getPassword().trim(), user.getPasswordHash())) {
             throw new InvalidCredentialsException("Invalid email or password.");

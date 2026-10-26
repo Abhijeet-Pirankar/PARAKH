@@ -19,11 +19,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DuplicateEmailException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateEmailException(DuplicateEmailException ex) {
-        log.warn("Duplicate registration attempt: {}", ex.getMessage());
+        log.warn("Duplicate registration attempt rejected for existing account");
+        String safeMessage = DuplicateEmailException.DEFAULT_MESSAGE;
         ErrorResponse errorResponse = ErrorResponse.builder()
-                .error("DUPLICATE_EMAIL")
-                .message(ex.getMessage())
-                .details(List.of(ex.getMessage()))
+                .error("REGISTRATION_FAILED")
+                .message(safeMessage)
+                .details(List.of(safeMessage))
                 .build();
         return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
     }

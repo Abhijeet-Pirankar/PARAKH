@@ -141,8 +141,10 @@ class DataIntegrityAndPrivacyIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(upperRequest)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error", is("DUPLICATE_EMAIL")))
-                .andExpect(jsonPath("$.message", containsString("already registered")));
+                .andExpect(jsonPath("$.error", is("REGISTRATION_FAILED")))
+                .andExpect(jsonPath("$.message", is("Unable to complete registration with the provided details. Please verify your information or log in.")))
+                .andExpect(jsonPath("$.message", not(containsString(baseEmail))))
+                .andExpect(jsonPath("$.details[0]", not(containsString(baseEmail))));
 
         // Attempt duplicate with MixedCase
         String mixedEmail = "UniQue_DuP_" + System.currentTimeMillis() + "@Domain.Com";
@@ -157,7 +159,8 @@ class DataIntegrityAndPrivacyIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(mixedRequest)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error", is("DUPLICATE_EMAIL")));
+                .andExpect(jsonPath("$.error", is("REGISTRATION_FAILED")))
+                .andExpect(jsonPath("$.message", not(containsString(baseEmail))));
     }
 
     @Test
